@@ -1162,7 +1162,7 @@ public partial class MainWindow : FluentWindow
 
 	private readonly TrayMenu _trayMenu = new TrayMenu();
 
-	/// <summary>右键托盘图标：组件库样式的菜单（和 WERandom 一致）。</summary>
+	/// <summary>右键托盘图标：亚克力样式的菜单（和 Claude 自动审批一致）。</summary>
 	private void ShowTrayMenu()
 	{
 		int total = _queue.Count, done = _queue.Count(IsFinished);
