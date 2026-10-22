@@ -112,7 +112,8 @@ public sealed class TrayMenu
 			Left = -32000,
 			Top = -32000,
 			Title = "EH 上传助手",
-			Content = list,
+			// 菜单比屏幕工作区还高时（低分辨率加高缩放）可以滚动，最下面的“退出”不会跑到屏幕外
+			Content = new ScrollViewer { Content = list, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled },
 		};
 		foreach (Entry e in entries)
 		{
@@ -145,6 +146,7 @@ public sealed class TrayMenu
 			int width = (int)Math.Ceiling(size.Width * dpi.DpiScaleX), height = (int)Math.Ceiling(size.Height * dpi.DpiScaleY);
 			GetWindowRect(handle, out Rect r);
 			// 第一次同时把窗口从屏幕外的起始位置移到点击处
+			height = Math.Min(height, System.Windows.Forms.Screen.FromPoint(at).WorkingArea.Height);
 			if (first || r.Right - r.Left != width || r.Bottom - r.Top != height)
 			{
 				Place(handle, at, width, height);
@@ -212,6 +214,7 @@ public sealed class TrayMenu
 	private static void Place(IntPtr handle, System.Drawing.Point at, int width, int height)
 	{
 		System.Drawing.Rectangle area = System.Windows.Forms.Screen.FromPoint(at).WorkingArea;
+		height = Math.Min(height, area.Height);
 		int x = at.X + width <= area.Right ? at.X : at.X - width;
 		int y = at.Y - height >= area.Top ? at.Y - height : at.Y;
 		x = Math.Max(area.Left, Math.Min(x, area.Right - width));
