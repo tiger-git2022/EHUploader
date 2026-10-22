@@ -1,0 +1,50 @@
+# e-hentai 自动上传配置（EXE 界面保存设置时会重写本文件）
+# 第一次运行时会自动复制成 config.toml；config.toml 是你自己的配置，不要提交到仓库。
+
+# 上传者简介（ulcomment），留空表示不填写。{raw} 会换成未翻译原画廊的链接；作品文件夹里有 upload_note.txt 时，其内容放在简介最前面
+comment = "AI 翻译，欢迎指正\nraw：{raw}"
+
+# 发布后在画廊下单独发表的评论（经验分享），留空表示不发
+share_comment = ""
+
+# 评论发送方式：first = 每次上传只在第一部下面发，all = 每部都发，off = 不发
+share_comment_mode = "off"
+
+# 原画廊评论里出现这些词就先拦下不上传（例如禁止机翻、已预定翻译），确认后可放行
+notice_keywords = ["禁止", "勿扰", "勿擾", "请勿", "請勿", "勿翻", "拒绝机翻", "拒絕機翻", "预定", "預定", "预订", "占坑", "认领", "認領", "正在翻译", "正在翻譯", "翻译中", "翻譯中", "汉化中", "漢化中", "正在汉化", "在翻了", "我来翻", "我會翻"]
+
+# 原画廊评论里出现这些词也先拦下，需要看原评论判断（英文词按整词匹配、不分大小写）
+review_keywords = ["组内", "組內", "翻译", "翻譯", "AI"]
+
+# 发布后补充的标签（原画廊标签会全部复制，下面命名空间除外）
+extra_tags = ["other:rough translation"]
+drop_tag_namespaces = ["language"]
+
+# 单次 Start Upload 的上限（网站限制单次不超过 500MB）
+batch_max_mb = 400
+batch_max_files = 200
+upload_timeout_min = 40
+
+# 随机等待（秒），避免请求过快
+delay_between_steps = [2, 5]
+
+# 每部作品之间随机等待的秒数 [最少, 最多]
+delay_between_galleries = [120, 180]
+
+# 是否隐藏浏览器窗口
+headless = true
+
+# 自动化用的浏览器 exe（Chromium 内核），留空使用 Edge
+browser_path = ""
+
+# 漫画根目录（命令行不给目录时扫描这里；EXE 用设置页里的目录）
+source_dir = ""
+
+# 本地 manga-translator-ui 目录，用来识别目次页的日文；留空则不识别
+mtu_dir = ""
+
+# 翻译 API 配置文件（含 [llm.clients.*]，用于罗马音标题等）；留空时用 source_dir 下的 att-mz/runtime/config.toml
+att_config = ""
+
+# 上面配置文件里用哪个客户端，默认 extra
+romaji_client = "extra"

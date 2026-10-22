@@ -1,0 +1,68 @@
+﻿<ui:FluentWindow x:Class="EHUploader.TagBatchWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="批量加标签"
+                 Width="1040" Height="720" MinWidth="760" MinHeight="420"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round"
+                 ShowInTaskbar="False">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <ui:TitleBar Grid.Row="0" x:Name="Bar" Title="批量加标签" ShowMinimize="False" ShowMaximize="False"/>
+        <StackPanel Grid.Row="1" Margin="24,4,24,0">
+            <TextBlock x:Name="Intro" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+            <TextBlock Text="要加的标签（一行一个，带上命名空间，比如 female:mind control）" Margin="0,14,0,6"/>
+            <ui:TextBox x:Name="TagsBox" AcceptsReturn="True" TextWrapping="NoWrap" MinHeight="90" MaxHeight="160"
+                        VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" FontFamily="Consolas, Microsoft YaHei UI"
+                        PlaceholderText="female:mind control"/>
+        </StackPanel>
+        <DockPanel Grid.Row="2" x:Name="ListPanel" Margin="24,12,24,0" Visibility="Collapsed">
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <ui:Button Content="全选" Padding="10,3" Margin="0,0,6,0" Click="All_Click"/>
+                    <ui:Button Content="全不选" Padding="10,3" Click="None_Click"/>
+                </StackPanel>
+                <TextBlock x:Name="ListLabel" VerticalAlignment="Center"/>
+            </DockPanel>
+            <ListBox x:Name="Items" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <!-- 一行两个，候选多时不用滚那么久 -->
+                <ListBox.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <UniformGrid Columns="2" VerticalAlignment="Top"/>
+                    </ItemsPanelTemplate>
+                </ListBox.ItemsPanel>
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <!-- 缩略图和标题都放在勾选框里：点整行任何位置都能勾选 / 取消 -->
+                        <CheckBox IsChecked="{Binding Checked, Mode=TwoWay}" VerticalContentAlignment="Center" Margin="0,2">
+                            <StackPanel Orientation="Horizontal">
+                                <Border Width="40" Height="56" CornerRadius="3" ClipToBounds="True" Margin="4,0,10,0"
+                                        Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                                    <Image Source="{Binding Thumb, TargetNullValue={x:Null}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Label}" TextWrapping="Wrap" MaxWidth="380"/>
+                                    <TextBlock Text="{Binding Sub}" FontSize="12" Foreground="{DynamicResource TextFillColorTertiaryBrush}" TextTrimming="CharacterEllipsis" MaxWidth="380"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </CheckBox>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+        <Border Grid.Row="3" Margin="0,12,0,0" Padding="24,10,24,12" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <ui:Button Content="取消" MinWidth="88" Margin="0,0,8,0" Click="Cancel_Click"/>
+                <ui:Button x:Name="OkButton" Content="加标签" Appearance="Primary" MinWidth="110" Click="Ok_Click"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</ui:FluentWindow>

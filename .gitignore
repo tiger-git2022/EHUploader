@@ -1,0 +1,65 @@
+# 这是公共仓库：默认忽略目录里的一切，只放行下面列出的源码和文档，
+# 避免 cookie、登录资料、上传记录、个人配置、漫画文件被误提交。
+/*
+!/.gitignore
+!/.gitattributes
+!/.github/
+!/eh_upload.py
+!/config.example.toml
+!/requirements.txt
+!/README.md
+!/CHANGELOG.md
+!/LICENSE
+!/gui_src/
+
+# ---- 以下即使出现在放行的目录里也不提交 ----
+
+# 个人配置与登录信息（cookie、apikey/apiuid、PHPSESSID、ipb_member_id/ipb_pass_hash、API key）
+config.toml
+eh_gui.json
+eh_seen.json
+excluded.json
+upload_meta.json
+source_links.json
+scan.json
+cookies.json
+*.cookies
+*.key
+.env
+
+# 浏览器资料（独立登录用的 Chromium 用户目录）、缓存、日志、上传记录
+browser_profile/
+cache/
+logs/
+state/
+_tmp/
+upload_state.json
+*.log
+*.bak
+*.tmp
+
+# 编译产物
+EHUploader/
+EHUploader_next/
+bin/
+obj/
+out/
+*.user
+.vs/
+
+# 漫画与图片（程序图标除外）
+*.cbz
+*.zip
+*.rar
+*.7z
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.gif
+!/gui_src/icon.png
+
+# Python
+__pycache__/
+*.pyc
+.venv/

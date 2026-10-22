@@ -1,0 +1,74 @@
+name: 编译发布
+
+# 推送 v* 标签（如 v1.0.0）时：在 Windows 上编译 EHUploader，打包 zip 并发布到 Releases。
+# 推送到 main、提 PR 或手动运行时：只编译打包，产物在本次运行的 Artifacts 里下载，不发布。
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: 读取版本号
+        id: ver
+        shell: pwsh
+        run: |
+          $v = ([xml](Get-Content gui_src/EHUploader.csproj -Raw)).Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1
+          if (-not $v) { Write-Error "EHUploader.csproj 里没有 <Version>"; exit 1 }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          if ("${{ github.ref_type }}" -eq "tag" -and "${{ github.ref_name }}" -ne "v$v") {
+            Write-Error "标签 ${{ github.ref_name }} 和 EHUploader.csproj 里的 Version=$v 不一致"
+            exit 1
+          }
+
+      - name: 检查 Python 脚本语法
+        shell: pwsh
+        run: python -m py_compile eh_upload.py
+
+      - name: 编译
+        run: dotnet publish gui_src/EHUploader.csproj -c Release -o out/EHUploader
+
+      - name: 打包
+        shell: pwsh
+        run: |
+          $dir = "out/EHUploader"
+          Remove-Item "$dir/*.pdb" -ErrorAction SilentlyContinue
+          Copy-Item eh_upload.py, config.example.toml, requirements.txt, README.md, CHANGELOG.md, LICENSE $dir
+          $zip = "out/EHUploader-${{ steps.ver.outputs.version }}.zip"
+          Compress-Archive -Path $dir -DestinationPath $zip
+          # Release 说明：取 CHANGELOG.md 里本版本那一节
+          $lines = Get-Content CHANGELOG.md -Encoding utf8
+          $start = [array]::IndexOf($lines, "## v${{ steps.ver.outputs.version }}")
+          if ($start -lt 0) { $notes = "见 CHANGELOG.md" } else {
+            $rest = $lines[($start + 1)..($lines.Count - 1)]
+            $end = ($rest | Select-String -Pattern '^## ' | Select-Object -First 1).LineNumber
+            $notes = if ($end) { $rest[0..($end - 2)] } else { $rest }
+          }
+          $dl = "`n`n## 下载`n`n下载下面的 ``EHUploader-${{ steps.ver.outputs.version }}.zip``，解压后双击 ``EHUploader.exe``。运行前需要 Python 3.11+，并在解压目录里执行 ``python -m pip install -r requirements.txt``；详见 [README](https://github.com/${{ github.repository }}#readme)。"
+          (($notes -join "`n").Trim() + $dl) | Set-Content out/notes.md -Encoding utf8
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: EHUploader-${{ steps.ver.outputs.version }}
+          path: out/*.zip
+
+      - name: 发布到 Releases
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: EH 上传助手 v${{ steps.ver.outputs.version }}
+          body_path: out/notes.md
+          files: out/*.zip

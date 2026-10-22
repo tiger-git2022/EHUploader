@@ -1,0 +1,100 @@
+﻿<ui:FluentWindow x:Class="EHUploader.EditMetaWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="编辑上传信息"
+                 Width="820" Height="820" MinWidth="640" MinHeight="560"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round"
+                 ShowInTaskbar="False">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <ui:TitleBar Grid.Row="0" Title="编辑上传信息" ShowMinimize="False" ShowMaximize="False"/>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="24,4,24,0">
+            <StackPanel>
+                <TextBlock x:Name="HeadText" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                <ui:InfoBar x:Name="NoticeBar" Margin="0,10,0,0" IsClosable="False" Severity="Error" Visibility="Collapsed"/>
+                <Border x:Name="NoticePanel" Visibility="Collapsed" Margin="0,6,0,0" Padding="12,8" CornerRadius="6"
+                        Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel>
+                        <TextBox x:Name="NoticeBox" IsReadOnly="True" TextWrapping="Wrap" MaxHeight="200" VerticalScrollBarVisibility="Auto"
+                                 BorderThickness="0" Background="Transparent" FontSize="13"/>
+                        <CheckBox x:Name="ConfirmNotices" Content="这些评论我看过了，确认可以上传" Margin="0,8,0,0"/>
+                    </StackPanel>
+                </Border>
+                <ui:InfoBar x:Name="PartialBar" Margin="0,10,0,0" IsClosable="False" Severity="Warning" Title="单行本 / 杂志节选"/>
+                <!-- 节选：看这一篇的第一页（通常是扉页），选这一篇的作者 -->
+                <Grid x:Name="PickPanel" Margin="0,10,0,0" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Width="150" Height="212" CornerRadius="4" ClipToBounds="True" Cursor="Hand"
+                            Background="{DynamicResource ControlFillColorSecondaryBrush}" MouseLeftButtonUp="FirstPage_Click"
+                            ToolTip="点击用看图软件打开原图">
+                        <Image x:Name="FirstPageImage" Stretch="Uniform"/>
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="16,0,0,0">
+                        <TextBlock Text="这一篇的第一页（日文原图）" FontWeight="SemiBold"/>
+                        <TextBlock Text="一般是扉页，上面印着篇名和作者。点左边的图可以放大看。" Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                        <TextBlock x:Name="AuthorLabel" Text="这一篇的作者" Margin="0,14,0,6"/>
+                        <ComboBox x:Name="AuthorPick" MinWidth="260" HorizontalAlignment="Left" SelectionChanged="AuthorPick_Changed"/>
+                        <TextBlock x:Name="AuthorHint" Text="括号里是标签库的参考名（多为日文原名，纯汉字的有时是简体）；标「推测」的是标签库没收录、由 DeepSeek 按罗马音猜的写法。选好后，标题里的作者和 artist 标签会自动换成这一位，日文标题里的作者名请对照扉页确认。"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" FontSize="12" Margin="0,6,0,0"/>
+                    </StackPanel>
+                </Grid>
+                <Expander x:Name="TocPanel" Header="原画廊评论里的目录（点一篇，自动填好这一篇的标题、作者和标签）" Margin="0,8,0,0" Visibility="Collapsed">
+                    <StackPanel>
+                        <ListBox x:Name="TocList" MaxHeight="260" ScrollViewer.VerticalScrollBarVisibility="Auto" SelectionChanged="TocList_Changed"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="56"/>
+                                            <ColumnDefinition Width="200"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding PageText}" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Author}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Author}" Margin="0,0,10,0"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Title}" TextWrapping="Wrap"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <TextBox x:Name="TocBox" IsReadOnly="True" TextWrapping="NoWrap" MaxHeight="160" VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                                 HorizontalScrollBarVisibility="Auto" FontFamily="Consolas, Microsoft YaHei UI" FontSize="12"/>
+                    </StackPanel>
+                </Expander>
+
+                <TextBlock Text="日文标题" Margin="0,14,0,6"/>
+                <ui:TextBox x:Name="JpBox" TextWrapping="Wrap"/>
+                <TextBlock Text="英文 / 罗马音标题（e-hentai 的主标题）" Margin="0,12,0,6"/>
+                <ui:TextBox x:Name="EnBox" TextWrapping="Wrap"/>
+                <TextBlock x:Name="TagsLabel" Text="标签（一行一个，发布后会全部加到画廊上）" Margin="0,12,0,6"/>
+            <ui:TextBox x:Name="TagsBox" AcceptsReturn="True" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" MinHeight="140" MaxHeight="320"
+                        VerticalContentAlignment="Top" FontFamily="Consolas, Microsoft YaHei UI" Margin="0,0,0,12"/>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="2" Padding="24,10,24,12" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+            <DockPanel>
+                <ui:Button x:Name="ResetButton" DockPanel.Dock="Left" Content="恢复自动生成" Icon="{ui:SymbolIcon ArrowReset24}" Click="Reset_Click"
+                           ToolTip="删除这部作品的自定义信息，改回自动生成的标题和标签"/>
+                <ui:Button x:Name="WholeButton" DockPanel.Dock="Left" Margin="8,0,0,0" Content="按完整作品上传" Icon="{ui:SymbolIcon BookOpen24}" Click="Whole_Click"
+                           ToolTip="不是节选（比如原画廊里有差分、无字版），直接用原画廊的标题和标签"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <ui:Button Content="取消" MinWidth="88" Margin="0,0,8,0" Click="Cancel_Click"/>
+                    <ui:Button Content="保存" Appearance="Primary" MinWidth="96" Click="Save_Click"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+    </Grid>
+</ui:FluentWindow>
