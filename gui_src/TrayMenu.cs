@@ -50,8 +50,35 @@ public sealed class TrayMenu
 
 	private FluentWindow _window;
 
-	/// <summary>亚克力系统背景要 Windows 11 22H2（22621）以上；更早的系统用纯色背景。</summary>
-	private static bool AcrylicSupported => Environment.OSVersion.Version.Major >= 10 && Environment.OSVersion.Version.Build >= 22621;
+	[StructLayout(LayoutKind.Sequential)]
+	private struct OsVersionInfo
+	{
+		public int Size, Major, Minor, Build, Platform;
+		[MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+		public string CsdVersion;
+	}
+
+	[DllImport("ntdll.dll", CharSet = CharSet.Unicode)]
+	private static extern int RtlGetVersion(ref OsVersionInfo info);
+
+	/// <summary>
+	/// 亚克力系统背景要 Windows 11 22H2（22621）以上；更早的系统用纯色背景。
+	/// 程序没有声明兼容 Win10/11 的清单，Environment.OSVersion 会报 6.2，所以直接问 RtlGetVersion 拿真实版本号。
+	/// </summary>
+	private static readonly bool AcrylicSupported = GetBuild() >= 22621;
+
+	private static int GetBuild()
+	{
+		try
+		{
+			var info = new OsVersionInfo { Size = Marshal.SizeOf(typeof(OsVersionInfo)) };
+			return RtlGetVersion(ref info) == 0 && info.Major >= 10 ? info.Build : 0;
+		}
+		catch (Exception)
+		{
+			return 0;
+		}
+	}
 
 	public bool IsOpen => _window != null && _window.IsVisible;
 
