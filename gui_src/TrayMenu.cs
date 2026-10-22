@@ -50,7 +50,7 @@ public sealed class TrayMenu
 
 	private FluentWindow _window;
 
-	[StructLayout(LayoutKind.Sequential)]
+	[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
 	private struct OsVersionInfo
 	{
 		public int Size, Major, Minor, Build, Platform;
