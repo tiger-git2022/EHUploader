@@ -119,17 +119,9 @@ dotnet publish gui_src/EHUploader.csproj -c Release -o out/EHUploader
 
 1. 改 `gui_src/EHUploader.csproj` 里的 `<Version>`（程序标题栏会显示这个版本号）。
 2. 在 `CHANGELOG.md` 顶部加一节 `## v新版本号`。
-3. 提交后打标签并推送：
+3. 合并（或推送）到 `main`。
 
-   ```bash
-   git tag v1.0.1
-   ```
-
-   ```bash
-   git push origin v1.0.1
-   ```
-
-GitHub Actions 会在 Windows 上编译、打包 zip，并以 CHANGELOG 里对应的一节作为说明发布到 Releases。标签和 `<Version>` 不一致时编译会直接失败。平时推送到 `main` 只编译检查，产物在 Actions 运行页的 Artifacts 里。
+GitHub Actions 发现这个版本号还没有 `v版本号` 标签，就会在 Windows 上编译、打包 zip，以 CHANGELOG 里对应的一节作为说明发布到 Releases，并打上标签。版本号没变时推送到 `main` 只编译检查，产物在 Actions 运行页的 Artifacts 里。也可以自己推标签 `v新版本号` 来发布，标签和 `<Version>` 不一致时编译会直接失败。
 
 ## 注意
 

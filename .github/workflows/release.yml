@@ -2,7 +2,8 @@ name: 编译发布
 
 # 推送 v* 标签（如 v1.0.0）时：在 Windows 上编译 EHUploader，打包 zip 并发布到 Releases。
 # 手动运行并勾选“发布”时：同样发布，并自动创建 v版本号 标签。
-# 推送到 main、提 PR 或手动运行（不勾选）时：只编译打包，产物在本次运行的 Artifacts 里下载，不发布。
+# 推送到 main 时：如果 gui_src/EHUploader.csproj 里的版本号还没有对应的 v版本号 标签，就自动发布并创建标签；否则只编译。
+# 提 PR 或手动运行（不勾选）时：只编译打包，产物在本次运行的 Artifacts 里下载，不发布。
 on:
   push:
     branches: [main]
@@ -39,6 +40,16 @@ jobs:
             Write-Error "标签 ${{ github.ref_name }} 和 EHUploader.csproj 里的 Version=$v 不一致"
             exit 1
           }
+          # 推到 main 时：这个版本号还没有 v版本号 标签，就自动发布
+          $publish = "false"
+          if ("${{ github.ref_type }}" -eq "tag" -or "${{ inputs.publish }}" -eq "true") {
+            $publish = "true"
+          } elseif ("${{ github.event_name }}" -eq "push" -and "${{ github.ref }}" -eq "refs/heads/main") {
+            $refs = git ls-remote --tags origin "refs/tags/v$v"
+            if ($LASTEXITCODE) { Write-Error "查询标签失败"; exit 1 }
+            if ($refs) { "v$v 已经发布过，这次只编译" } else { "v$v 还没发布，这次自动发布"; $publish = "true" }
+          }
+          "publish=$publish" >> $env:GITHUB_OUTPUT
 
       - name: 检查 Python 脚本语法
         shell: pwsh
@@ -72,7 +83,7 @@ jobs:
           path: out/*.zip
 
       - name: 发布到 Releases
-        if: github.ref_type == 'tag' || inputs.publish
+        if: steps.ver.outputs.publish == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.ver.outputs.version }}
