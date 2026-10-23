@@ -16,6 +16,11 @@ on:
         type: boolean
         default: false
 
+# 同一分支的运行排队执行，后一次能看到前一次刚建的标签，避免同一版本号发布两次
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
