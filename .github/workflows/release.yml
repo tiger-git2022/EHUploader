@@ -81,11 +81,30 @@ jobs:
           }
           $dl = "`n`n## 下载`n`n下载下面的 ``EHUploader-${{ steps.ver.outputs.version }}.zip``，解压后双击 ``EHUploader.exe``。运行前需要 Python 3.11+，并在解压目录里执行 ``python -m pip install -r requirements.txt``；详见 [README](https://github.com/${{ github.repository }}#readme)。"
           (($notes -join "`n").Trim() + $dl) | Set-Content out/notes.md -Encoding utf8
+          # update.json：程序从 releases/latest/download/update.json 读新版本，格式和 GitHub 接口的发布信息一样，
+          # 这样不占接口每个 IP 每小时 60 次的额度。
+          $tag = "v${{ steps.ver.outputs.version }}"
+          $name = Split-Path $zip -Leaf
+          $base = "https://github.com/${{ github.repository }}/releases"
+          [ordered]@{
+            tag_name = $tag
+            html_url = "$base/tag/$tag"
+            body = Get-Content out/notes.md -Raw -Encoding utf8
+            assets = @([ordered]@{
+              name = $name
+              size = (Get-Item $zip).Length
+              digest = "sha256:" + (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+              browser_download_url = "$base/download/$tag/$name"
+            })
+          } | ConvertTo-Json -Depth 4 | Set-Content out/update.json -Encoding utf8NoBOM
+          Get-Content out/update.json
 
       - uses: actions/upload-artifact@v5
         with:
           name: EHUploader-${{ steps.ver.outputs.version }}
-          path: out/*.zip
+          path: |
+            out/*.zip
+            out/update.json
 
       - name: 发布到 Releases
         if: steps.ver.outputs.publish == 'true'
@@ -95,4 +114,6 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: EH 上传助手 v${{ steps.ver.outputs.version }}
           body_path: out/notes.md
-          files: out/*.zip
+          files: |
+            out/*.zip
+            out/update.json
