@@ -51,10 +51,36 @@ public static class Updater
 
 	public static string AppDir => AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
 
+	/// <summary>
+	/// 发版时附带的 update.json（和接口返回的发布信息格式相同）。走的是普通下载地址，不占 GitHub 接口
+	/// 每个 IP 每小时 60 次的额度。
+	/// </summary>
+	public const string ManifestUrl = ReleasesUrl + "/download/update.json";
+
+	/// <summary>先读 update.json；读不到（比如旧版本发布时还没有这个文件）再问 GitHub 接口。</summary>
+	static async Task<string> LatestReleaseJsonAsync()
+	{
+		try
+		{
+			return await Http.GetStringAsync(ManifestUrl).ConfigureAwait(false);
+		}
+		catch (Exception manifestError) when (manifestError is HttpRequestException || manifestError is TaskCanceledException)
+		{
+			try
+			{
+				return await Http.GetStringAsync("https://api.github.com/repos/" + Repo + "/releases/latest").ConfigureAwait(false);
+			}
+			catch (HttpRequestException apiError)
+			{
+				throw new HttpRequestException("update.json：" + manifestError.Message + "；GitHub 接口：" + apiError.Message);
+			}
+		}
+	}
+
 	/// <summary>有比当前新的版本就返回它，否则返回 null。</summary>
 	public static async Task<UpdateInfo> CheckAsync()
 	{
-		string json = await Http.GetStringAsync("https://api.github.com/repos/" + Repo + "/releases/latest").ConfigureAwait(false);
+		string json = await LatestReleaseJsonAsync().ConfigureAwait(false);
 		var r = new JavaScriptSerializer { MaxJsonLength = 16 * 1024 * 1024 }.Deserialize<Dictionary<string, object>>(json);
 		string tag = Str(r, "tag_name") ?? "";
 		int[] latest = Parse(tag);

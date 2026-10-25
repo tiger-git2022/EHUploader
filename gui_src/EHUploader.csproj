@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>EHUploader</AssemblyName>
     <!-- 版本号：发布时改这里，并打同名标签（如 v1.0.0） -->
-    <Version>1.0.2</Version>
+    <Version>1.0.3</Version>
     <Product>EH 上传助手</Product>
     <RootNamespace>EHUploader</RootNamespace>
     <OutputType>WinExe</OutputType>
