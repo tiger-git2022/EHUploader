@@ -275,6 +275,14 @@
                             </Border>
                         </StackPanel>
                     </ui:Button>
+                    <!-- 平板收发（TabletPage.cs） -->
+                    <ui:Button Style="{StaticResource NavButton}" Tag="5" Click="Nav_Click">
+                        <StackPanel Orientation="Horizontal"><ui:SymbolIcon Symbol="Tablet24" Margin="0,0,12,0" VerticalAlignment="Center"/><TextBlock Text="平板收发" VerticalAlignment="Center"/>
+                            <Border x:Name="TabletBadge" Height="18" MinWidth="18" CornerRadius="9" Padding="5,0" Margin="10,0,0,0" Background="#0067C0" Visibility="Collapsed" VerticalAlignment="Center">
+                                <local:InkText x:Name="TabletBadgeText" Foreground="White" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </StackPanel>
+                    </ui:Button>
                     <ui:Button Style="{StaticResource NavButton}" Tag="4" Click="Nav_Click">
                         <StackPanel Orientation="Horizontal"><ui:SymbolIcon Symbol="Settings24" Margin="0,0,12,0"/><TextBlock Text="设置"/></StackPanel>
                     </ui:Button>
@@ -596,6 +604,72 @@
                         </DockPanel>
 
                         <!-- 4 设置 -->
+                        <!-- 5 平板收发 -->
+                        <DockPanel x:Name="PageTablet" Margin="24,12,24,12" Visibility="Collapsed">
+                            <StackPanel DockPanel.Dock="Top">
+                                <ui:CardControl Icon="{ui:SymbolIcon Tablet24}">
+                                    <ui:CardControl.Header>
+                                        <StackPanel>
+                                            <TextBlock x:Name="TabletStatus" Text="接收平板发来的漫画"/>
+                                            <TextBlock x:Name="TabletDetail" Style="{StaticResource Muted}"
+                                                       Text="打开后，平板上的 EhViewer 在下载列表里多选、点「发到电脑翻译」，漫画就会放进漫画根目录下你选的批次文件夹"/>
+                                        </StackPanel>
+                                    </ui:CardControl.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <ui:Button x:Name="TabletNewCode" Content="换配对码" Margin="0,0,12,0" Click="TabletNewCode_Click" Visibility="Collapsed"
+                                                   ToolTip="换一个新的配对码；已经配对的平板不受影响"/>
+                                        <ui:ToggleSwitch x:Name="TabletEnabled" Click="TabletEnabled_Click"/>
+                                    </StackPanel>
+                                </ui:CardControl>
+                                <ui:CardControl Icon="{ui:SymbolIcon ScanText24}">
+                                    <ui:CardControl.Header>
+                                        <StackPanel>
+                                            <TextBlock Text="解压后自动识别原文"/>
+                                            <TextBlock Style="{StaticResource Muted}"
+                                                       Text="用 config.toml 里 mtu_dir 的 manga-translator-ui 跑一遍「导出原文」（只识别，不翻译、不嵌字），结果在作品的 manga_translator_work 里"/>
+                                        </StackPanel>
+                                    </ui:CardControl.Header>
+                                    <ui:ToggleSwitch x:Name="TabletOcr" Click="TabletOcr_Click"/>
+                                </ui:CardControl>
+                                <TextBlock x:Name="TabletSummary" Style="{StaticResource Muted}" Margin="2,10,0,8"
+                                           Text="翻译完（译图在 作品编号\manga_translator_work\result 里）后，选中作品点「打包送回」：按译图数量逐页替换或只保留译图，写回 cbz，平板会自动取回。"/>
+                            </StackPanel>
+                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+                                <ui:Button x:Name="TabletPack" Content="打包送回" Appearance="Primary" Icon="{ui:SymbolIcon ArrowExportUp24}" Margin="0,0,8,0" Click="TabletPack_Click"
+                                           ToolTip="把译图写回 cbz，等平板取回；译图不到原图 40% 时只保留译图"/>
+                                <ui:Button Content="重新识别原文" Icon="{ui:SymbolIcon ScanText24}" Margin="0,0,8,0" Click="TabletOcrAgain_Click"/>
+                                <ui:Button Content="打开翻译文件夹" Icon="{ui:SymbolIcon FolderOpen24}" Margin="0,0,8,0" Click="TabletOpenWork_Click"
+                                           ToolTip="解压出的原图所在的文件夹（拖进 manga-translator-ui 翻译）"/>
+                                <ui:Button Content="打开作品文件夹" Icon="{ui:SymbolIcon Folder24}" Margin="0,0,8,0" Click="TabletOpenItem_Click"/>
+                                <ui:Button Content="移出列表" Icon="{ui:SymbolIcon Dismiss24}" Click="TabletRemove_Click"
+                                           ToolTip="只是不再显示，文件都留着"/>
+                            </StackPanel>
+                            <DataGrid x:Name="TabletGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" CanUserAddRows="False"
+                                      SelectionMode="Extended" MouseDoubleClick="TabletGrid_DoubleClick">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="原画廊" Binding="{Binding Gid}" Width="90"/>
+                                    <DataGridTextColumn Header="标题" Binding="{Binding Title}" Width="*">
+                                        <DataGridTextColumn.ElementStyle>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="TextWrapping" Value="Wrap"/>
+                                                <Setter Property="Margin" Value="0,4"/>
+                                            </Style>
+                                        </DataGridTextColumn.ElementStyle>
+                                    </DataGridTextColumn>
+                                    <DataGridTextColumn Header="批次" Binding="{Binding Folder}" Width="110"/>
+                                    <DataGridTextColumn Header="译图" Binding="{Binding Progress}" Width="80"/>
+                                    <DataGridTextColumn Header="状态" Binding="{Binding StateText}" Width="260">
+                                        <DataGridTextColumn.ElementStyle>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="TextWrapping" Value="Wrap"/>
+                                                <Setter Property="Margin" Value="0,4"/>
+                                            </Style>
+                                        </DataGridTextColumn.ElementStyle>
+                                    </DataGridTextColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+
                         <ScrollViewer x:Name="PageSettings" Padding="24,6,24,16" Visibility="Collapsed">
                             <StackPanel>
                                 <TextBlock Text="账号" Style="{StaticResource Section}"/>

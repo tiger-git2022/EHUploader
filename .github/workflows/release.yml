@@ -58,7 +58,7 @@ jobs:
 
       - name: 检查 Python 脚本语法
         shell: pwsh
-        run: python -m py_compile eh_upload.py
+        run: python -m py_compile eh_upload.py tablet_bridge.py
 
       - name: 编译
         run: dotnet publish gui_src/EHUploader.csproj -c Release -o out/EHUploader
@@ -68,7 +68,7 @@ jobs:
         run: |
           $dir = "out/EHUploader"
           Remove-Item "$dir/*.pdb" -ErrorAction SilentlyContinue
-          Copy-Item eh_upload.py, config.example.toml, requirements.txt, README.md, CHANGELOG.md, LICENSE $dir
+          Copy-Item eh_upload.py, tablet_bridge.py, config.example.toml, requirements.txt, README.md, CHANGELOG.md, LICENSE $dir
           $zip = "out/EHUploader-${{ steps.ver.outputs.version }}.zip"
           Compress-Archive -Path $dir -DestinationPath $zip
           # Release 说明：取 CHANGELOG.md 里本版本那一节
