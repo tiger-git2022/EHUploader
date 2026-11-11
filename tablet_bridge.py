@@ -5,8 +5,9 @@
   python tablet_bridge.py --root 漫画根目录 [--port 38765] [--ocr]
 
 收到的漫画放在 漫画根目录\\批次\\{gid}-[标题]\\{gid}.cbz（和 ComicInfo.xml），解压到 漫画根目录\\批次\\{gid}\\，
-和作品列表扫描、manga-translator-ui 用的结构一样。翻译结果放在 {gid}\\manga_translator_work\\result 里，
-点「打包送回」后按 cbz-refill 的规则写回 {gid}.cbz：译图不到原图 40% 时只保留译图（重新编号），否则逐页替换。
+和作品列表扫描、manga-translator-ui 用的结构一样。翻好文字后点「渲染并送回」：用 manga-translator-ui 的
+「导入翻译并渲染」把译文嵌进图里，放进 {gid}\\manga_translator_work\\result，再按 cbz-refill 的规则写回 {gid}.cbz：
+译图不到原图 40% 时只保留译图（重新编号），否则逐页替换。已经自己渲染好的，点「直接打包送回」只做后半步。
 
 通信（HTTP，端口默认 38765，同一端口的 UDP 用来让平板自动找到电脑）：
   POST /pair                              配对码换取令牌
@@ -17,7 +18,7 @@
   GET  /api/items/{gid}/result            取回打包好的 cbz
   POST /api/items/{gid}/taken             平板已取回
   DELETE /api/items/{gid}                 平板撤销（文件留着，只是不再出现在列表里）
-  /local/*                                只接受本机（EXE 界面）的请求：列表、打包送回、移出列表、换配对码
+  /local/*                                只接受本机（EXE 界面）的请求：列表、渲染、打包送回、移出列表、换配对码
 """
 from __future__ import annotations
 
@@ -212,9 +213,11 @@ class Bridge:
                     self.run_ocr(it)
                 elif kind == "pack":
                     self.pack(it)
+                elif kind == "render":
+                    self.render(it)
             except Exception as e:   # 一本出错不影响其他的
                 log(f"{gid} {kind} 出错：{e!r}")
-                what = {"extract": "解压", "ocr": "识别原文", "pack": "打包"}[kind]
+                what = {"extract": "解压", "ocr": "识别原文", "pack": "打包", "render": "渲染"}[kind]
                 self.state.update(gid, state="error", message=f"{what}失败：{e}")
             self.changed()
 
@@ -251,32 +254,77 @@ class Bridge:
                               else "等你翻译（没找到 manga-translator-ui，没有自动识别原文）")
             emit("tablet_notice", text=f"收到 {it.get('title') or gid}，已解压到 {it['folder']}\\{gid}")
 
-    def run_ocr(self, it: dict) -> None:
-        """用 manga-translator-ui 的「导出原文」模式识别整本（不翻译、不渲染），结果在 manga_translator_work 里。"""
-        gid = str(it["gid"])
-        _, _, work = self.paths(it)
+    def run_mtu(self, gid: str, work: Path, cli: dict, conf_name: str, extra: list[str] = (), no_translator: bool = False) -> None:
+        """跑一遍 manga-translator-ui 的命令行（local 模式），cli 是这次要用的工作流开关，其他设置照它自己的 config.json。"""
         mtu = mtu_dir()
-        py = mtu / ".venv" / "Scripts" / "python.exe"
-        self.state.update(gid, state="ocr", message="正在识别原文")
-        self.changed()
+        py = mtu / ".venv" / "Scripts" / "python.exe" if mtu else None
+        if not py or not py.exists():
+            raise RuntimeError("没找到 manga-translator-ui（config.toml 的 mtu_dir）")
         conf = json.loads((mtu / "config" / "config.json").read_text(encoding="utf-8"))
-        conf.setdefault("cli", {}).update(template=True, save_text=True, load_text=False, translate_json_only=False,
-                                          generate_and_export=False, save_to_source_dir=True)
-        conf.setdefault("translator", {})["translator"] = "none"
+        flags = dict(template=False, save_text=False, load_text=False, translate_json_only=False,
+                     generate_and_export=False, replace_translation=False, export_from_local_json=False)
+        flags.update(cli)
+        conf.setdefault("cli", {}).update(flags)
+        if no_translator:
+            conf.setdefault("translator", {})["translator"] = "none"
         CACHE_DIR.mkdir(exist_ok=True)
-        conf_file = CACHE_DIR / "tablet_ocr.json"
+        conf_file = CACHE_DIR / conf_name
         conf_file.write_text(json.dumps(conf, ensure_ascii=False), encoding="utf-8")
-        log(f"{gid} 用 manga-translator-ui 识别原文：{work}")
-        t = time.time()
-        r = subprocess.run([str(py), "-X", "utf8", "-m", "manga_translator", "local", "-i", str(work), "--config", str(conf_file)],
+        r = subprocess.run([str(py), "-X", "utf8", "-m", "manga_translator", "local", "-i", str(work), "--config", str(conf_file), *extra],
                            cwd=mtu, env=dict(os.environ, PYTHONUTF8="1"), capture_output=True, timeout=3 * 3600,
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         if r.returncode != 0:
             tail = (r.stderr or r.stdout).decode("utf-8", "replace").strip().splitlines()[-3:]
             raise RuntimeError(f"manga-translator-ui 退出码 {r.returncode}：{' / '.join(tail)}")
+
+    def run_ocr(self, it: dict) -> None:
+        """用 manga-translator-ui 的「导出原文」模式识别整本（不翻译、不渲染），结果在 manga_translator_work 里。"""
+        gid = str(it["gid"])
+        _, _, work = self.paths(it)
+        self.state.update(gid, state="ocr", message="正在识别原文")
+        self.changed()
+        log(f"{gid} 用 manga-translator-ui 识别原文：{work}")
+        t = time.time()
+        self.run_mtu(gid, work, dict(template=True, save_text=True, save_to_source_dir=True), "tablet_ocr.json",
+                     no_translator=True)
         log(f"{gid} 识别原文完成，用时 {int(time.time() - t)} 秒")
         self.state.update(gid, state="waiting", message="原文已识别，等你翻译")
         emit("tablet_notice", text=f"{it.get('title') or gid} 的原文识别好了，可以开始翻译")
+
+    def render(self, it: dict) -> None:
+        """用 manga-translator-ui 的「导入翻译并渲染」把翻好的文字嵌回图里，译图放进 manga_translator_work\\result，然后打包。"""
+        gid = str(it["gid"])
+        _, _, work = self.paths(it)
+        mtw = work / "manga_translator_work"
+        jsons = list((mtw / "json").glob("*_translations.json")) if (mtw / "json").is_dir() else []
+        if not jsons:
+            self.state.update(gid, state="waiting", message="还没有识别原文（manga_translator_work\\json 是空的），先识别原文再翻译")
+            return
+        self.state.update(gid, state="rendering", message=f"正在导入翻译并渲染（{len(jsons)} 页）")
+        self.changed()
+        # 命令行模式不会自己放进 result，先渲染到临时文件夹再挪过去
+        out = mtw / "_tablet_render"
+        shutil.rmtree(out, ignore_errors=True)
+        log(f"{gid} 用 manga-translator-ui 导入翻译并渲染：{work}")
+        t = time.time()
+        try:
+            self.run_mtu(gid, work, dict(load_text=True, ignore_errors=True, batch_concurrent=False), "tablet_render.json",
+                         ["-o", str(out), "--overwrite"])
+            made = [p for p in out.rglob("*") if p.is_file() and is_image(p.name)] if out.is_dir() else []
+            if not made:
+                raise RuntimeError("manga-translator-ui 没有渲染出图片，看看译文 TXT 是不是在 manga_translator_work\\originals 里")
+            res = mtw / "result"
+            res.mkdir(parents=True, exist_ok=True)
+            stems = {p.stem.lower() for p in made}
+            for old in res.iterdir():   # 换了输出格式时，同名旧译图（另一种扩展名）不能留着
+                if old.is_file() and is_image(old.name) and old.stem.lower() in stems:
+                    old.unlink()
+            for p in made:
+                os.replace(p, res / p.name)
+        finally:
+            shutil.rmtree(out, ignore_errors=True)
+        log(f"{gid} 渲染完成：{len(made)} 张，用时 {int(time.time() - t)} 秒")
+        self.pack(self.state.item(gid))
 
     def pack(self, it: dict) -> None:
         gid = str(it["gid"])
@@ -436,7 +484,7 @@ class Handler(BaseHTTPRequestHandler):
             folder, dirname = safe_name(q["folder"]), safe_name(q["dir"])
             if not dirname.startswith(f"{gid}-"):
                 dirname = safe_name(f"{gid}-{dirname}")
-            if (b.state.item(gid) or {}).get("state") in ("extracting", "ocr", "packing"):
+            if (b.state.item(gid) or {}).get("state") in ("extracting", "ocr", "rendering", "packing"):
                 return self.fail(409, "电脑正在处理这一本，等一会儿再发")
             dest = b.root / folder / dirname
             dest.mkdir(parents=True, exist_ok=True)
@@ -506,16 +554,18 @@ class Handler(BaseHTTPRequestHandler):
         if parts == ["newcode"] and method == "POST":
             b.new_code()
             return self.send_json({"code": b.code})
-        if parts in (["pack"], ["remove"], ["ocr"]) and method == "POST":
+        if parts in (["pack"], ["remove"], ["ocr"], ["render"]) and method == "POST":
             gids = [str(g) for g in self.body_json().get("gids", [])]
+            queued = {"pack": ("pack_queued", "等待打包"), "ocr": ("ocr_queued", "等待识别原文"),
+                      "render": ("render_queued", "等待导入翻译并渲染")}
             for g in gids:
                 if not b.state.item(g):
                     continue
                 if parts == ["remove"]:
                     b.state.update(g, hidden=True)
                 else:
-                    b.state.update(g, state="pack_queued" if parts == ["pack"] else "ocr_queued",
-                                   message="等待打包" if parts == ["pack"] else "等待识别原文")
+                    state, message = queued[parts[0]]
+                    b.state.update(g, state=state, message=message)
                     b.jobs.put((parts[0], g))
             b.changed()
             return self.send_json({"ok": True})
@@ -599,6 +649,8 @@ def main() -> None:
             bridge.jobs.put(("ocr", gid))
         elif it.get("state") in ("pack_queued", "packing"):
             bridge.jobs.put(("pack", gid))
+        elif it.get("state") in ("render_queued", "rendering"):
+            bridge.jobs.put(("render", gid))
         elif it.get("state") == "receiving":
             bridge.state.update(gid, state="error", message="上次没传完，请在平板上重新发送")
     ips = local_ips()

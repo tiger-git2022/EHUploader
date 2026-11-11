@@ -25,6 +25,8 @@ public sealed class TabletItem
 		["ocr_queued"] = "等待识别原文",
 		["ocr"] = "识别原文中",
 		["waiting"] = "等你翻译",
+		["render_queued"] = "等待导入翻译并渲染",
+		["rendering"] = "渲染中",
 		["pack_queued"] = "等待打包",
 		["packing"] = "打包中",
 		["ready"] = "已打包，等平板取回",
@@ -347,6 +349,16 @@ public partial class MainWindow
 		if (await TabletPost("pack", new Dictionary<string, object> { ["gids"] = sel.Where(i => i.Translated > 0).Select(i => i.Gid).ToArray() }))
 		{
 			FooterStatus.Text = $"已开始打包 {sel.Count - empty.Count} 本" + (empty.Count > 0 ? $"，{empty.Count} 本还没有译图，跳过" : "");
+		}
+		TabletRefresh();
+	}
+
+	private async void TabletRender_Click(object sender, RoutedEventArgs e)
+	{
+		List<TabletItem> sel = SelectedTablet();
+		if (sel.Count > 0 && await TabletPost("render", new Dictionary<string, object> { ["gids"] = sel.Select(i => i.Gid).ToArray() }))
+		{
+			FooterStatus.Text = $"已排队导入翻译并渲染 {sel.Count} 本，渲染完自动打包送回";
 		}
 		TabletRefresh();
 	}
