@@ -5,6 +5,7 @@
 !/.gitattributes
 !/.github/
 !/eh_upload.py
+!/tablet_bridge.py
 !/config.example.toml
 !/requirements.txt
 !/README.md
@@ -34,6 +35,7 @@ logs/
 state/
 _tmp/
 upload_state.json
+tablet_state.json
 *.log
 *.bak
 *.tmp

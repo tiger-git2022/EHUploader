@@ -74,7 +74,7 @@ set HTTPS_PROXY=http://127.0.0.1:端口
 | `att_config` | 一个含 `[llm.clients.<名称>]`（`url`、`api_key`、`model`，OpenAI 兼容接口）的 TOML 文件，用来把日文篇名、作者名转成罗马音。不填时找 `source_dir\att-mz\runtime\config.toml`，都没有就保留日文 |
 | `romaji_client` | 上面文件里用哪个客户端，默认 `extra` |
 
-`config.toml`、`browser_profile\`、`cache\`、`logs\`、`upload_state.json` 等都是你本机的数据（里面有登录 cookie、上传记录），**不要分享给别人，也不要提交到仓库**。
+`config.toml`、`browser_profile\`、`cache\`、`logs\`、`upload_state.json`、`tablet_state.json` 等都是你本机的数据（里面有登录 cookie、上传记录），**不要分享给别人，也不要提交到仓库**。
 
 ## 功能
 
@@ -85,8 +85,24 @@ set HTTPS_PROXY=http://127.0.0.1:端口
 - **单行本拆篇**：识别目次页，把单行本、杂志按篇拆成多个画廊上传。
 - **更新已发布画廊**：本地改过译图后再上传，会发布新版本，保留原有评论。
 - **我的上传**：列出已发布画廊和最新评论，可以直接回复、批量加标签、打开改名投票页。
+- **平板收发**：平板上的 EhViewer 通过局域网把下载的漫画直接发过来（不用拔 SD 卡），自动解压、可选自动识别原文；翻好文字后点「渲染并送回」（自动跑「导入翻译并渲染」再写回 cbz），平板自动取回替换。详见下面「平板收发」一节。
 - **托盘运行**：关窗口时最小化到托盘，上传在后台继续。
 - **自动更新**：定时检查 GitHub 上的新版本，有新版本时托盘提示，点一下就能下载并替换程序文件（设置和记录不动），完成后自动重新打开；托盘菜单里也可以手动“检查更新…”。新版本的 `requirements.txt` 有变化时，更新后再执行一次 `python -m pip install -r requirements.txt`。
+
+## 平板收发
+
+配合 [EhViewer（tiger-git2022/ehviewer-onedrive）](https://github.com/tiger-git2022/ehviewer-onedrive) 使用，电脑和平板在同一个局域网里就行。
+
+1. 在「设置」里填好漫画根目录，到「平板收发」页打开「接收平板发来的漫画」。第一次打开时 Windows 防火墙会询问是否允许 Python 访问网络，勾选**专用网络**并允许。
+2. 平板 EhViewer：下载列表里多选 → 点「发到电脑翻译」→ 选批次文件夹（默认新建今天日期的）。第一次会自动找到电脑并要你输入这页显示的 6 位配对码。找不到电脑时，在平板的「电脑翻译」页手动填电脑地址（这页上显示的 IP:端口）。
+3. 电脑收到后放在 `漫画根目录\批次\编号-[标题]\编号.cbz`（和 `ComicInfo.xml`），解压到 `漫画根目录\批次\编号\`。打开「解压后自动识别原文」并在 `config.toml` 里填了 `mtu_dir` 时，会用 manga-translator-ui 的「导出原文」模式识别一遍。
+4. 在 manga-translator-ui 里翻好文字，然后在列表里选中作品（可多选）点「渲染并送回」：自动用 manga-translator-ui 的「导入翻译并渲染」把译文嵌进图里（译图放进 `编号\manga_translator_work\result`），再写回 cbz：译图不到原图 40% 时只保留译图并重新编号，否则逐页替换（按文件名对应）。平板会自动取回并替换卡上的原版（平板上留有原版备份）。已经在 manga-translator-ui 里自己渲染好的，点「直接打包送回」。
+
+收发服务是同目录下的 `tablet_bridge.py`，端口默认 38765（TCP 收发文件，UDP 让平板自动找到电脑）；配对过的平板记在 `tablet_state.json`，不要分享给别人。也可以不开界面单独运行：
+
+```bash
+python tablet_bridge.py --root 漫画根目录 --ocr
+```
 
 ## 命令行用法
 

@@ -24,7 +24,7 @@ namespace EHUploader;
 /// <summary>Main window (WPF-UI): works list with filters, upload progress, upload history, settings.</summary>
 public partial class MainWindow : FluentWindow
 {
-	private static readonly string[] PageNames = { "作品列表", "上传进度", "上传记录", "已上传", "设置" };
+	private static readonly string[] PageNames = { "作品列表", "上传进度", "上传记录", "已上传", "设置", "平板收发" };
 
 	private readonly string _dir;
 	private readonly string _settingsPath;
@@ -55,7 +55,7 @@ public partial class MainWindow : FluentWindow
 		_settingsPath = Path.Combine(_dir, "eh_gui.json");
 		_gs = GuiSettings.Load(_settingsPath);
 		_backend = new Backend(Path.Combine(_dir, "eh_upload.py")) { Python = _gs.Python };
-		_pages = new FrameworkElement[] { PageWorks, PageProgress, PageHistory, PageMine, PageSettings };
+		_pages = new FrameworkElement[] { PageWorks, PageProgress, PageHistory, PageMine, PageSettings, PageTablet };
 		_mineBackend = new Backend(_backend.Script);
 		_seenPath = Path.Combine(_dir, "eh_seen.json");
 		_seen = LoadSeen();
@@ -85,6 +85,7 @@ public partial class MainWindow : FluentWindow
 		CloseToTray.IsChecked = _gs.CloseToTray;
 		InitTray();
 		InitUpdateCheck();
+		InitTablet();
 		UpdateOverall();
 		ApplyAppearance();
 		_ready = true;
@@ -293,13 +294,12 @@ public partial class MainWindow : FluentWindow
 		{
 			_pages[i].Visibility = i == idx ? Visibility.Visible : Visibility.Collapsed;
 		}
-		int n = 0;
 		foreach (object child in Nav.Children)
 		{
+			// 按 Tag 对应页面：「平板收发」排在「设置」上面，但页面编号是 5
 			if (child is Wpf.Ui.Controls.Button b)
 			{
-				b.Appearance = n == idx ? ControlAppearance.Secondary : ControlAppearance.Transparent;
-				n++;
+				b.Appearance = b.Tag?.ToString() == idx.ToString() ? ControlAppearance.Secondary : ControlAppearance.Transparent;
 			}
 		}
 		Header.Text = PageNames[idx];
@@ -310,6 +310,10 @@ public partial class MainWindow : FluentWindow
 		if (idx == 2)
 		{
 			RefreshHistory();
+		}
+		if (idx == 5)
+		{
+			TabletRefresh();
 		}
 		if (idx == 3 && (_mineLoadedAt == null || _mineStale || DateTime.Now - _mineLoadedAt > TimeSpan.FromMinutes(15)))
 		{
@@ -1207,6 +1211,13 @@ public partial class MainWindow : FluentWindow
 	{
 		_tray.BalloonTipClicked += (s, e) =>
 		{
+			if (_tabletBalloon)
+			{
+				_tabletBalloon = false;
+				ShowFromTray();
+				SelectPage(5);
+				return;
+			}
 			if (_update != null)
 			{
 				Dispatcher.BeginInvoke((Action)(async () => await CheckUpdates(manual: true)));
@@ -1831,10 +1842,17 @@ public partial class MainWindow : FluentWindow
 
 	private async Task<bool> SaveSettings()
 	{
+		string oldRoot = _gs.Root, oldPython = _gs.Python;
 		_gs.Root = RootPath.Text.Trim();
 		_gs.Python = string.IsNullOrWhiteSpace(PythonPath.Text) ? "python" : PythonPath.Text.Trim();
 		_backend.Python = _gs.Python;
 		SaveGui();
+		if (_gs.TabletEnabled && (oldRoot != _gs.Root || oldPython != _gs.Python || _tabletBackend == null))
+		{
+			// 平板收发用的是漫画根目录和 Python：改了就按新的重开
+			StopTablet();
+			StartTablet();
+		}
 		Dictionary<string, object> cfg = new Dictionary<string, object>
 		{
 			["comment"] = CommentBox.Text.Replace("\r\n", "\n").Trim(),

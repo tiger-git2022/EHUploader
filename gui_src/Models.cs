@@ -580,6 +580,11 @@ public sealed class GuiSettings
 	public bool TrayHintShown { get; set; }
 	public bool? LoginOk { get; set; }
 	public string LoginChecked { get; set; } = "";
+	/// <summary>平板收发：开着时程序启动就在后台接收平板发来的漫画。</summary>
+	public bool TabletEnabled { get; set; }
+	/// <summary>平板收发：解压后用 manga-translator-ui 自动识别原文。</summary>
+	public bool TabletOcr { get; set; } = true;
+	public int TabletPort { get; set; } = 38765;
 
 	public static GuiSettings Load(string path)
 	{
