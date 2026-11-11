@@ -254,8 +254,10 @@ class Bridge:
                               else "等你翻译（没找到 manga-translator-ui，没有自动识别原文）")
             emit("tablet_notice", text=f"收到 {it.get('title') or gid}，已解压到 {it['folder']}\\{gid}")
 
-    def run_mtu(self, gid: str, work: Path, cli: dict, conf_name: str, extra: list[str] = (), no_translator: bool = False) -> None:
-        """跑一遍 manga-translator-ui 的命令行（local 模式），cli 是这次要用的工作流开关，其他设置照它自己的 config.json。"""
+    def run_mtu(self, gid: str, work: Path, cli: dict, conf_name: str, extra: list[str] = (), no_translator: bool = False,
+                label: str = "", done=None) -> None:
+        """跑一遍 manga-translator-ui 的命令行（local 模式），cli 是这次要用的工作流开关，其他设置照它自己的 config.json。
+        done() 数出已经处理好几页，跑的时候每两秒更新一次状态（「label 12/30 页」）。"""
         mtu = mtu_dir()
         py = mtu / ".venv" / "Scripts" / "python.exe" if mtu else None
         if not py or not py.exists():
@@ -270,12 +272,33 @@ class Bridge:
         CACHE_DIR.mkdir(exist_ok=True)
         conf_file = CACHE_DIR / conf_name
         conf_file.write_text(json.dumps(conf, ensure_ascii=False), encoding="utf-8")
-        r = subprocess.run([str(py), "-X", "utf8", "-m", "manga_translator", "local", "-i", str(work), "--config", str(conf_file), *extra],
-                           cwd=mtu, env=dict(os.environ, PYTHONUTF8="1"), capture_output=True, timeout=3 * 3600,
-                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        if r.returncode != 0:
-            tail = (r.stderr or r.stdout).decode("utf-8", "replace").strip().splitlines()[-3:]
-            raise RuntimeError(f"manga-translator-ui 退出码 {r.returncode}：{' / '.join(tail)}")
+        total = len([p for p in work.iterdir() if p.is_file() and is_image(p.name)])
+        out_log = LOG_DIR / f"mtu_{Path(conf_name).stem}.log"   # 输出写文件，不用管道，免得输出太多卡住
+        with out_log.open("wb") as f:
+            proc = subprocess.Popen([str(py), "-X", "utf8", "-m", "manga_translator", "local", "-i", str(work), "--config", str(conf_file), *extra],
+                                    cwd=mtu, env=dict(os.environ, PYTHONUTF8="1"), stdout=f, stderr=subprocess.STDOUT,
+                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            end = time.time() + 3 * 3600
+            last = -1
+            while True:
+                try:
+                    code = proc.wait(timeout=2)
+                    break
+                except subprocess.TimeoutExpired:
+                    pass
+                if time.time() > end:
+                    proc.kill()
+                    proc.wait()
+                    raise RuntimeError("manga-translator-ui 跑了 3 个小时还没完，已停止")
+                if done and label:
+                    n = min(done(), total) if total else done()
+                    if n != last:
+                        last = n
+                        self.state.update(gid, message=f"{label} {n}/{total} 页" if total else f"{label} {n} 页")
+                        self.changed()
+        if code != 0:
+            tail = out_log.read_bytes().decode("utf-8", "replace").strip().splitlines()[-3:]
+            raise RuntimeError(f"manga-translator-ui 退出码 {code}：{' / '.join(tail)}")
 
     def run_ocr(self, it: dict) -> None:
         """用 manga-translator-ui 的「导出原文」模式识别整本（不翻译、不渲染），结果在 manga_translator_work 里。"""
@@ -285,8 +308,12 @@ class Bridge:
         self.changed()
         log(f"{gid} 用 manga-translator-ui 识别原文：{work}")
         t = time.time()
+        jdir = work / "manga_translator_work" / "json"
+        start = time.time() - 1
+        # 识别好一页就写一份 json（重新识别时旧的也在，只数这次写的）
+        done = lambda: sum(1 for p in jdir.glob("*_translations.json") if p.stat().st_mtime >= start) if jdir.is_dir() else 0
         self.run_mtu(gid, work, dict(template=True, save_text=True, save_to_source_dir=True), "tablet_ocr.json",
-                     no_translator=True)
+                     no_translator=True, label="正在识别原文", done=done)
         log(f"{gid} 识别原文完成，用时 {int(time.time() - t)} 秒")
         self.state.update(gid, state="waiting", message="原文已识别，等你翻译")
         emit("tablet_notice", text=f"{it.get('title') or gid} 的原文识别好了，可以开始翻译")
@@ -308,8 +335,9 @@ class Bridge:
         log(f"{gid} 用 manga-translator-ui 导入翻译并渲染：{work}")
         t = time.time()
         try:
+            done = lambda: sum(1 for p in out.rglob("*") if p.is_file() and is_image(p.name)) if out.is_dir() else 0
             self.run_mtu(gid, work, dict(load_text=True, ignore_errors=True, batch_concurrent=False), "tablet_render.json",
-                         ["-o", str(out), "--overwrite"])
+                         ["-o", str(out), "--overwrite"], label="正在导入翻译并渲染", done=done)
             made = [p for p in out.rglob("*") if p.is_file() and is_image(p.name)] if out.is_dir() else []
             if not made:
                 raise RuntimeError("manga-translator-ui 没有渲染出图片，看看译文 TXT 是不是在 manga_translator_work\\originals 里")
