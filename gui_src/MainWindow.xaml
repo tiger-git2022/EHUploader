@@ -686,7 +686,7 @@
                                     </DataGridTemplateColumn>
                                     <DataGridTextColumn Header="批次" Binding="{Binding Folder}" Width="110"/>
                                     <DataGridTextColumn Header="译图" Binding="{Binding Progress}" Width="80"/>
-                                    <DataGridTextColumn Header="状态" Binding="{Binding StateText}" Width="260">
+                                    <DataGridTextColumn Header="状态" Binding="{Binding StateText}" Width="200">
                                         <DataGridTextColumn.ElementStyle>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="TextWrapping" Value="Wrap"/>
@@ -694,19 +694,19 @@
                                             </Style>
                                         </DataGridTextColumn.ElementStyle>
                                     </DataGridTextColumn>
-                                    <DataGridTemplateColumn Header="文件位置" Width="200" SortMemberPath="Location">
+                                    <DataGridTemplateColumn Header="文件位置" Width="220" SortMemberPath="Location">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
                                                 <DockPanel>
                                                     <ui:Button DockPanel.Dock="Right" Icon="{ui:SymbolIcon FolderOpen24}" Appearance="Transparent" Padding="4" Margin="2,0,0,0" VerticalAlignment="Center"
                                                                Click="TabletRowOpen_Click" ToolTip="打开这个文件夹"/>
                                                     <ui:Button DockPanel.Dock="Right" Icon="{ui:SymbolIcon Copy24}" Appearance="Transparent" Padding="4" Margin="4,0,0,0" VerticalAlignment="Center" Click="TabletCopyLocation_Click" ToolTip="复制文件位置"/>
-                                                    <TextBlock Text="{Binding Location}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Location}" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding Location}" TextWrapping="Wrap" Margin="0,4" VerticalAlignment="Center"/>
                                                 </DockPanel>
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
-                                    <DataGridTemplateColumn Width="Auto">
+                                    <DataGridTemplateColumn Width="110">
                                         <DataGridTemplateColumn.Header>
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="提示词" VerticalAlignment="Center"/>
@@ -716,8 +716,10 @@
                                         </DataGridTemplateColumn.Header>
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
-                                                <ui:Button Content="复制提示词" Icon="{ui:SymbolIcon Copy24}" Appearance="Transparent" Padding="8,3"
-                                                           Click="TabletRowPrompt_Click" ToolTip="按「提示词模板」生成这一本的提示词（带上它的路径），复制到剪贴板"/>
+                                                <ui:Button Icon="{ui:SymbolIcon Copy24}" Appearance="Transparent" Padding="8,3" Margin="0,4"
+                                                           Click="TabletRowPrompt_Click" ToolTip="按「提示词模板」生成这一本的提示词（带上它的路径），复制到剪贴板">
+                                                    <TextBlock Text="复制提示词" TextWrapping="Wrap"/>
+                                                </ui:Button>
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
