@@ -12,7 +12,7 @@
 通信（HTTP，端口默认 38765，同一端口的 UDP 用来让平板自动找到电脑）：
   POST /pair                              配对码换取令牌
   GET  /api/info | /api/folders           电脑信息、批次文件夹
-  PUT  /api/items/{gid}/files/{name}      上传 {gid}.cbz、ComicInfo.xml（?folder=批次&dir=作品文件夹名）
+  PUT  /api/items/{gid}/files/{name}      上传 {gid}.cbz、ComicInfo.xml（?folder=批次&dir=作品文件夹名&title=标题），边收边显示进度
   POST /api/items/{gid}/received          文件传完，开始解压
   GET  /api/items?gids=1,2                状态
   GET  /api/items/{gid}/result            取回打包好的 cbz
@@ -95,6 +95,14 @@ def is_image(name: str) -> bool:
     return Path(n).suffix.lower() in IMAGE_EXTS and not TMP_CROP.match(n) and not n.startswith(".")
 
 
+def human_size(n: int) -> str:
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} GB"
+
+
 def safe_name(name: str) -> str:
     """Windows 文件名里不能有的字符换成下划线，去掉结尾的点和空格，太长的截短。"""
     name = BAD_CHARS.sub("_", name).strip().rstrip(". ")
@@ -131,11 +139,13 @@ class State:
     def item(self, gid: str) -> dict | None:
         return self.items.get(str(gid))
 
-    def update(self, gid: str, **kv) -> dict:
+    def update(self, gid: str, save: bool = True, **kv) -> dict:
+        """save=False 只改内存（接收进度这种一秒变几次的），下一次 save 时一起写进文件。"""
         with self.lock:
             it = self.items.setdefault(str(gid), {"gid": int(gid)})
             it.update(kv, updated=datetime.now().isoformat(timespec="seconds"))
-            self.save()
+            if save:
+                self.save()
             return it
 
 
@@ -517,22 +527,51 @@ class Handler(BaseHTTPRequestHandler):
             dest = b.root / folder / dirname
             dest.mkdir(parents=True, exist_ok=True)
             n = int(self.headers["Content-Length"])
-            part = dest / (name + ".part")
-            with part.open("wb") as f:
-                left = n
-                while left > 0:
-                    chunk = self.rfile.read(min(left, 1 << 20))
-                    if not chunk:
-                        raise ValueError("传输中断")
-                    f.write(chunk)
-                    left -= len(chunk)
+            what = "漫画" if name.endswith(".cbz") else name
+            title = str(q.get("title") or "")[:300]
+            extra = {"title": title} if title else {}
             if name.endswith(".cbz"):
-                zipfile.ZipFile(part).close()   # 能打开才算收到
+                extra["received"] = datetime.now().isoformat(timespec="seconds")   # 收的时候就排在列表最上面
+            b.state.update(gid, state="receiving", message=f"正在接收{what} 0/{human_size(n)}", folder=folder, dir=dirname,
+                           device=device, hidden=False, translated=None, **extra)
+            b.changed()
+            if name.endswith(".cbz"):
+                log(f"{device} 正在发来 {gid}（{human_size(n)}）：{folder}\\{dirname}")
+                emit("tablet_notice", text=f"{device} 正在发来 {title or gid}（{human_size(n)}）")
+            part = dest / (name + ".part")
+            shown = time.monotonic()
+            try:
+                with part.open("wb") as f:
+                    left = n
+                    while left > 0:
+                        chunk = self.rfile.read(min(left, 1 << 20))
+                        if not chunk:
+                            raise ValueError("传输中断")
+                        f.write(chunk)
+                        left -= len(chunk)
+                        if time.monotonic() - shown >= 0.5 and left > 0:   # 一秒两次，界面跟着走
+                            shown = time.monotonic()
+                            done = n - left
+                            b.state.update(gid, save=False, message=f"正在接收{what} {human_size(done)}/{human_size(n)}（{done * 100 // n}%）")
+                            b.changed()
+            except (OSError, ValueError) as e:
+                b.state.update(gid, state="error", message=f"接收中断（{e}）")
+                b.changed()
+                part.unlink(missing_ok=True)
+                raise ValueError(f"接收中断：{e}") from e
+            if name.endswith(".cbz"):
+                try:
+                    zipfile.ZipFile(part).close()   # 能打开才算收到
+                except zipfile.BadZipFile as e:
+                    part.unlink(missing_ok=True)
+                    b.state.update(gid, state="error", message="收到的 cbz 打不开，请在平板上重新发送")
+                    b.changed()
+                    raise ValueError("收到的 cbz 打不开") from e
                 old = dest / f"{gid}.original.cbz"
                 if old.exists():
                     old.unlink()   # 重新发来的：以新的为原版
             os.replace(part, dest / name)
-            b.state.update(gid, state="receiving", message="正在接收", folder=folder, dir=dirname, device=device, hidden=False)
+            b.state.update(gid, state="receiving", message=f"已收到{what}（{human_size(n)}），等平板说传完")
             b.changed()
             return self.send_json({"ok": True, "bytes": n})
         if rest == ["received"] and method == "POST":
