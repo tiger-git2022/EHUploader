@@ -95,10 +95,27 @@ def mtu_python() -> tuple[Path | None, str | None]:
     mtu = mtu_dir()
     if not mtu:
         return None, "没设置 manga-translator-ui 目录（设置页，或 config.toml 的 mtu_dir）"
-    py = mtu / ".venv" / "Scripts" / "python.exe"
-    if not py.exists():
-        return None, f"{mtu} 里没有 .venv\\Scripts\\python.exe"
-    return py, None
+    # 和 manga-translator-ui 自己的 Win-Start.bat 一样：先用整合包自带的 Python，再用 .venv
+    for py in (mtu / "packaging" / "python" / "python.exe", mtu / ".venv" / "Scripts" / "python.exe"):
+        if py.exists():
+            return py, None
+    return None, f"{mtu} 里没有 packaging\\python\\python.exe 或 .venv\\Scripts\\python.exe"
+
+
+def mtu_device(out_log: Path) -> str | None:
+    """从 manga-translator-ui 的输出看出这次用的是 GPU 还是 CPU；还没打印出来时返回 None。"""
+    try:
+        with out_log.open("rb") as f:
+            text = f.read(1 << 20).decode("utf-8", "replace")
+    except OSError:
+        return None
+    if "could not be found in torch" in text:   # 要了 GPU 但 torch 用不了 CUDA，它自己退回 CPU
+        return "CPU：manga-translator-ui 的 torch 用不了 CUDA"
+    if "使用 GPU: True" in text:
+        return "GPU"
+    if "使用 GPU: False" in text:
+        return "CPU"
+    return None
 
 
 def elapsed(start: float) -> str:
@@ -286,9 +303,10 @@ class Bridge:
                  + ("" if not self.ocr else f"（没有自动识别原文：{problem}）"))
 
     def run_mtu(self, gid: str, work: Path, cli: dict, conf_name: str, extra: list[str] = (), no_translator: bool = False,
-                label: str = "", done=None) -> None:
+                label: str = "", done=None) -> str | None:
         """跑一遍 manga-translator-ui 的命令行（local 模式），cli 是这次要用的工作流开关，其他设置照它自己的 config.json。
-        done() 数出已经处理好几页，跑的时候每两秒更新一次状态（「label 12/30 页」）。"""
+        done() 数出已经处理好几页，跑的时候每两秒更新一次状态（「label 12/30 页 · GPU」）。返回这次用的是 GPU 还是 CPU。
+        每次都是单独的进程，跑完进程退出，模型占的内存和显存随之释放。"""
         py, problem = mtu_python()
         if not py:
             raise RuntimeError(problem)
@@ -306,12 +324,15 @@ class Bridge:
         total = len([p for p in work.iterdir() if p.is_file() and is_image(p.name)])
         out_log = LOG_DIR / f"mtu_{Path(conf_name).stem}.log"   # 输出写文件，不用管道，免得输出太多卡住
         with out_log.open("wb") as f:
-            proc = subprocess.Popen([str(py), "-X", "utf8", "-m", "manga_translator", "local", "-i", str(work), "--config", str(conf_file), *extra],
+            # --use-gpu：不管 config.json 里开没开都用 GPU；torch 用不了 CUDA 时它自己退回 CPU（mtu_device 会看出来）
+            proc = subprocess.Popen([str(py), "-X", "utf8", "-m", "manga_translator", "local", "-i", str(work), "--config", str(conf_file),
+                                     "--use-gpu", *extra],
                                     cwd=mtu, env=dict(os.environ, PYTHONUTF8="1"), stdout=f, stderr=subprocess.STDOUT,
                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             started = time.time()
             end = started + 3 * 3600
             last = None
+            device = None
             while True:
                 try:
                     code = proc.wait(timeout=2)
@@ -322,12 +343,14 @@ class Bridge:
                     proc.kill()
                     proc.wait()
                     raise RuntimeError("manga-translator-ui 跑了 3 个小时还没完，已停止")
+                if not device or device == "GPU":   # 退回 CPU 的警告在「使用 GPU: True」之后才打印
+                    device = mtu_device(out_log) or device
                 if label:
                     # 每两秒一次：页数加上已用时间，第一页出来前（加载模型）也看得出在跑
                     n = (min(done(), total) if total else done()) if done else None
                     pages = "" if n is None else (f" {n}/{total} 页" if total else f" {n} 页")
                     wait = "，正在加载模型" if n == 0 else ""
-                    msg = f"{label}{pages}{wait} · 已用 {elapsed(started)}"
+                    msg = f"{label}{pages}{wait}{f' · {device}' if device else ''} · 已用 {elapsed(started)}"
                     if msg != last:
                         last = msg
                         self.state.update(gid, save=False, message=msg)
@@ -335,6 +358,7 @@ class Bridge:
         if code != 0:
             tail = out_log.read_bytes().decode("utf-8", "replace").strip().splitlines()[-3:]
             raise RuntimeError(f"manga-translator-ui 退出码 {code}：{' / '.join(tail)}")
+        return mtu_device(out_log) or device
 
     def run_ocr(self, it: dict) -> None:
         """用 manga-translator-ui 的「导出原文」模式识别整本（不翻译、不渲染），结果在 manga_translator_work 里。"""
@@ -348,10 +372,10 @@ class Bridge:
         start = time.time() - 1
         # 识别好一页就写一份 json（重新识别时旧的也在，只数这次写的）
         done = lambda: sum(1 for p in jdir.glob("*_translations.json") if p.stat().st_mtime >= start) if jdir.is_dir() else 0
-        self.run_mtu(gid, work, dict(template=True, save_text=True, save_to_source_dir=True), "tablet_ocr.json",
-                     no_translator=True, label="正在识别原文", done=done)
-        log(f"{gid} 识别原文完成，用时 {int(time.time() - t)} 秒")
-        self.state.update(gid, state="waiting", message="原文已识别，等你翻译")
+        device = self.run_mtu(gid, work, dict(template=True, save_text=True, save_to_source_dir=True), "tablet_ocr.json",
+                              no_translator=True, label="正在识别原文", done=done)
+        log(f"{gid} 识别原文完成（{device or '没看出用的 GPU 还是 CPU'}），用时 {int(time.time() - t)} 秒")
+        self.state.update(gid, state="waiting", message=f"原文已识别（{device + '，' if device else ''}用时 {elapsed(t)}），等你翻译")
         emit("tablet_notice", text=f"{it.get('title') or gid} 的原文识别好了，可以开始翻译")
 
     def render(self, it: dict) -> None:
@@ -372,8 +396,8 @@ class Bridge:
         t = time.time()
         try:
             done = lambda: sum(1 for p in out.rglob("*") if p.is_file() and is_image(p.name)) if out.is_dir() else 0
-            self.run_mtu(gid, work, dict(load_text=True, ignore_errors=True, batch_concurrent=False), "tablet_render.json",
-                         ["-o", str(out), "--overwrite"], label="正在导入翻译并渲染", done=done)
+            device = self.run_mtu(gid, work, dict(load_text=True, ignore_errors=True, batch_concurrent=False), "tablet_render.json",
+                                  ["-o", str(out), "--overwrite"], label="正在导入翻译并渲染", done=done)
             made = [p for p in out.rglob("*") if p.is_file() and is_image(p.name)] if out.is_dir() else []
             if not made:
                 raise RuntimeError("manga-translator-ui 没有渲染出图片，看看译文 TXT 是不是在 manga_translator_work\\originals 里")
@@ -387,7 +411,7 @@ class Bridge:
                 os.replace(p, res / p.name)
         finally:
             shutil.rmtree(out, ignore_errors=True)
-        log(f"{gid} 渲染完成：{len(made)} 张，用时 {int(time.time() - t)} 秒")
+        log(f"{gid} 渲染完成：{len(made)} 张（{device or '没看出用的 GPU 还是 CPU'}），用时 {int(time.time() - t)} 秒")
         self.pack(self.state.item(gid))
 
     def pack(self, it: dict) -> None:

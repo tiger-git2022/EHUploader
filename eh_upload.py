@@ -1057,8 +1057,10 @@ def ocr_images(paths: list[Path]) -> dict[str, str]:
     cache = json.loads(TOC_OCR_CACHE.read_text(encoding="utf-8")) if TOC_OCR_CACHE.exists() else {}
     keyf = lambda p: f"{p}|{int(p.stat().st_mtime)}|{p.stat().st_size}"
     todo = [p for p in paths if keyf(p) not in cache]
-    py = MTU_DIR / ".venv" / "Scripts" / "python.exe" if MTU_DIR else None
-    if todo and py and py.exists():
+    # 和 manga-translator-ui 的 Win-Start.bat 一样：先用整合包自带的 Python，再用 .venv
+    py = next((p for p in (MTU_DIR / "packaging" / "python" / "python.exe", MTU_DIR / ".venv" / "Scripts" / "python.exe") if p.exists()),
+              None) if MTU_DIR else None
+    if todo and py:
         tmp = CACHE_DIR / "ocr_tmp"
         shutil.rmtree(tmp, ignore_errors=True)
         tmp.mkdir(parents=True)
@@ -1076,7 +1078,7 @@ def ocr_images(paths: list[Path]) -> dict[str, str]:
         emit("scan_progress", text=f"正在识别 {len(todo)} 张目次候选页的文字（第一次约 1 分钟）…")
         log(f"  用 manga-translator-ui 识别 {len(todo)} 张目次候选页")
         try:
-            subprocess.run([str(py), "-X", "utf8", "-m", "manga_translator", "local", "-i", str(tmp), "--config", str(conf_file), "--overwrite"],
+            subprocess.run([str(py), "-X", "utf8", "-m", "manga_translator", "local", "-i", str(tmp), "--config", str(conf_file), "--overwrite", "--use-gpu"],
                            cwd=MTU_DIR, env=dict(os.environ, PYTHONUTF8="1"), capture_output=True, timeout=900)
         except Exception as e:
             log(f"  识别目次页失败：{e}")

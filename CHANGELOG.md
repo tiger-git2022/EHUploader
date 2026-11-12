@@ -2,6 +2,12 @@
 
 每个版本一节，标题写成 `## v版本号`。发布时，GitHub Actions 会把对应的一节作为 Release 说明。
 
+## v1.3.2
+
+- 自动识别原文和「渲染并送回」现在总是让 manga-translator-ui 用 GPU（以前跟着它 config.json 里的「使用 GPU」，关着就用 CPU）。状态里会写出这次用的是 GPU 还是 CPU；torch 用不了 CUDA、退回 CPU 时也会写明。
+- 找 manga-translator-ui 的 Python 和它自己的启动脚本一样：先用整合包自带的 `packaging\python`，再用 `.venv`。
+- 每次识别、渲染都是单独的 manga-translator-ui 进程，跑完进程退出，模型占的内存和显存随之释放；关掉收发服务时也会连同它一起结束。
+
 ## v1.3.1
 
 - 「平板收发」列表里文件位置和「复制提示词」按钮不再被截断成省略号，放不下时换行完整显示。
