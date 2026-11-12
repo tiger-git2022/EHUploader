@@ -394,18 +394,17 @@ public partial class MainWindow
 
 	private string TabletPromptTemplate => string.IsNullOrWhiteSpace(_gs.TabletPrompt) ? TabletPrompt.DefaultTemplate : _gs.TabletPrompt;
 
-	private void TabletCopyPrompt_Click(object sender, RoutedEventArgs e)
+	/// <summary>列表每一行的「复制提示词」：按模板生成这一本的提示词复制到剪贴板。</summary>
+	private void TabletRowPrompt_Click(object sender, RoutedEventArgs e)
 	{
-		List<TabletItem> sel = SelectedTablet();
-		if (sel.Count == 0)
+		if ((sender as FrameworkElement)?.DataContext is not TabletItem item)
 		{
 			return;
 		}
-		string text = string.Join("\r\n\r\n----------\r\n\r\n", sel.Select(i => TabletPrompt.Fill(TabletPromptTemplate, _gs.Root, i)));
 		try
 		{
-			Clipboard.SetText(text);
-			FooterStatus.Text = sel.Count == 1 ? $"已复制「{sel[0].Title}」的提示词" : $"已复制 {sel.Count} 本的提示词（一本一段）";
+			Clipboard.SetText(TabletPrompt.Fill(TabletPromptTemplate, _gs.Root, item));
+			FooterStatus.Text = $"已复制「{item.Title}」的提示词";
 		}
 		catch (Exception ex)
 		{

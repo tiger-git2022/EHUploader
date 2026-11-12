@@ -644,9 +644,8 @@
                                 <ui:Button Content="打开翻译文件夹" Icon="{ui:SymbolIcon FolderOpen24}" Margin="0,0,8,0" Click="TabletOpenWork_Click"
                                            ToolTip="解压出的原图所在的文件夹（拖进 manga-translator-ui 翻译）"/>
                                 <ui:Button Content="打开作品文件夹" Icon="{ui:SymbolIcon Folder24}" Margin="0,0,8,0" Click="TabletOpenItem_Click"/>
-                                <ui:Button Content="复制提示词" Icon="{ui:SymbolIcon Copy24}" Margin="0,0,8,0" Click="TabletCopyPrompt_Click"
-                                           ToolTip="按模板生成给翻译 agent 的提示词（带上这一本的路径），复制到剪贴板；选了多本就一本一段"/>
-                                <ui:Button Content="提示词模板" Icon="{ui:SymbolIcon Edit24}" Margin="0,0,8,0" Click="TabletPromptTemplate_Click"/>
+                                <ui:Button Content="提示词模板" Icon="{ui:SymbolIcon Edit24}" Margin="0,0,8,0" Click="TabletPromptTemplate_Click"
+                                           ToolTip="改每一行「复制提示词」用的模板"/>
                                 <ui:Button Content="移出列表" Icon="{ui:SymbolIcon Dismiss24}" Click="TabletRemove_Click"
                                            ToolTip="只是不再显示，文件都留着"/>
                             </WrapPanel>
@@ -672,6 +671,14 @@
                                             </Style>
                                         </DataGridTextColumn.ElementStyle>
                                     </DataGridTextColumn>
+                                    <DataGridTemplateColumn Header="提示词" Width="Auto">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <ui:Button Content="复制提示词" Icon="{ui:SymbolIcon Copy24}" Appearance="Transparent" Padding="8,3"
+                                                           Click="TabletRowPrompt_Click" ToolTip="按「提示词模板」生成这一本的提示词（带上它的路径），复制到剪贴板"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
                                 </DataGrid.Columns>
                             </DataGrid>
                         </DockPanel>
