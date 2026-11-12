@@ -392,6 +392,40 @@ public partial class MainWindow
 		TabletRefresh();
 	}
 
+	private string TabletPromptTemplate => string.IsNullOrWhiteSpace(_gs.TabletPrompt) ? TabletPrompt.DefaultTemplate : _gs.TabletPrompt;
+
+	private void TabletCopyPrompt_Click(object sender, RoutedEventArgs e)
+	{
+		List<TabletItem> sel = SelectedTablet();
+		if (sel.Count == 0)
+		{
+			return;
+		}
+		string text = string.Join("\r\n\r\n----------\r\n\r\n", sel.Select(i => TabletPrompt.Fill(TabletPromptTemplate, _gs.Root, i)));
+		try
+		{
+			Clipboard.SetText(text);
+			FooterStatus.Text = sel.Count == 1 ? $"已复制「{sel[0].Title}」的提示词" : $"已复制 {sel.Count} 本的提示词（一本一段）";
+		}
+		catch (Exception ex)
+		{
+			FooterStatus.Text = "复制失败（剪贴板被别的程序占用？）：" + ex.Message;
+		}
+	}
+
+	private void TabletPromptTemplate_Click(object sender, RoutedEventArgs e)
+	{
+		PromptWindow dlg = new PromptWindow(TabletPromptTemplate) { Owner = this };
+		if (dlg.ShowDialog() != true)
+		{
+			return;
+		}
+		string t = dlg.Template.Trim();
+		_gs.TabletPrompt = t.Length == 0 || t == TabletPrompt.DefaultTemplate.Trim() ? null : t;
+		SaveGui();
+		FooterStatus.Text = "提示词模板已保存";
+	}
+
 	private async void TabletRemove_Click(object sender, RoutedEventArgs e)
 	{
 		List<TabletItem> sel = SelectedTablet();

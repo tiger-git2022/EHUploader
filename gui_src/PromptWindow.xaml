@@ -1,0 +1,33 @@
+﻿<ui:FluentWindow x:Class="EHUploader.PromptWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 Title="提示词模板"
+                 Width="860" Height="720" MinWidth="600" MinHeight="420"
+                 WindowStartupLocation="CenterOwner"
+                 ExtendsContentIntoTitleBar="True"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round"
+                 ShowInTaskbar="False">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <ui:TitleBar Grid.Row="0" Title="提示词模板" ShowMinimize="False" ShowMaximize="False"/>
+        <ui:TextBox Grid.Row="1" x:Name="TemplateBox" Margin="24,4,24,0" AcceptsReturn="True" AcceptsTab="True" TextWrapping="Wrap"
+                    VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"/>
+        <TextBlock Grid.Row="2" x:Name="Legend" Margin="24,10,24,0" TextWrapping="Wrap" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+        <Border Grid.Row="3" Margin="0,12,0,0" Padding="24,10,24,12" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+            <DockPanel>
+                <ui:Button Content="恢复默认" MinWidth="96" Click="Reset_Click"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <ui:Button Content="取消" MinWidth="88" Margin="0,0,8,0" Click="Cancel_Click"/>
+                    <ui:Button Content="保存" Appearance="Primary" MinWidth="96" Click="Ok_Click"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+    </Grid>
+</ui:FluentWindow>

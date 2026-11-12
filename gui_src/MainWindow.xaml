@@ -635,7 +635,7 @@
                                 <TextBlock x:Name="TabletSummary" Style="{StaticResource Muted}" Margin="2,10,0,8"
                                            Text="在 manga-translator-ui 里翻好文字后，选中作品点「渲染并送回」：自动跑「导入翻译并渲染」，再按译图数量逐页替换或只保留译图写回 cbz，平板会自动取回。已经自己渲染好（译图在 作品编号\manga_translator_work\result 里）的，点「直接打包送回」。"/>
                             </StackPanel>
-                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+                            <WrapPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
                                 <ui:Button x:Name="TabletRender" Content="渲染并送回" Appearance="Primary" Icon="{ui:SymbolIcon PaintBrush24}" Margin="0,0,8,0" Click="TabletRender_Click"
                                            ToolTip="用 manga-translator-ui 的「导入翻译并渲染」把译文嵌进图里，然后写回 cbz，等平板取回"/>
                                 <ui:Button x:Name="TabletPack" Content="直接打包送回" Icon="{ui:SymbolIcon FolderZip24}" Margin="0,0,8,0" Click="TabletPack_Click"
@@ -644,9 +644,12 @@
                                 <ui:Button Content="打开翻译文件夹" Icon="{ui:SymbolIcon FolderOpen24}" Margin="0,0,8,0" Click="TabletOpenWork_Click"
                                            ToolTip="解压出的原图所在的文件夹（拖进 manga-translator-ui 翻译）"/>
                                 <ui:Button Content="打开作品文件夹" Icon="{ui:SymbolIcon Folder24}" Margin="0,0,8,0" Click="TabletOpenItem_Click"/>
+                                <ui:Button Content="复制提示词" Icon="{ui:SymbolIcon Copy24}" Margin="0,0,8,0" Click="TabletCopyPrompt_Click"
+                                           ToolTip="按模板生成给翻译 agent 的提示词（带上这一本的路径），复制到剪贴板；选了多本就一本一段"/>
+                                <ui:Button Content="提示词模板" Icon="{ui:SymbolIcon Edit24}" Margin="0,0,8,0" Click="TabletPromptTemplate_Click"/>
                                 <ui:Button Content="移出列表" Icon="{ui:SymbolIcon Dismiss24}" Click="TabletRemove_Click"
                                            ToolTip="只是不再显示，文件都留着"/>
-                            </StackPanel>
+                            </WrapPanel>
                             <DataGrid x:Name="TabletGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" CanUserAddRows="False"
                                       SelectionMode="Extended" MouseDoubleClick="TabletGrid_DoubleClick">
                                 <DataGrid.Columns>
