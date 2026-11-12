@@ -585,6 +585,8 @@ public sealed class GuiSettings
 	/// <summary>平板收发：解压后用 manga-translator-ui 自动识别原文。</summary>
 	public bool TabletOcr { get; set; } = true;
 	public int TabletPort { get; set; } = 38765;
+	/// <summary>平板收发「复制提示词」的模板；空的用 TabletPrompt.DefaultTemplate。</summary>
+	public string TabletPrompt { get; set; }
 
 	public static GuiSettings Load(string path)
 	{

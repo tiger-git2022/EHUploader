@@ -38,6 +38,8 @@ public sealed class TabletItem
 	public string Title { get; set; }
 	public string Folder { get; set; }
 	public string Dir { get; set; }
+	/// <summary>解压出的原图文件夹（根目录\批次\编号），列表「文件位置」一列。</summary>
+	public string Location { get; set; }
 	public string State { get; set; }
 	public string Message { get; set; }
 	public int Pages { get; set; }
@@ -209,7 +211,9 @@ public partial class MainWindow
 		_tablet.Clear();
 		foreach (Dictionary<string, object> d in rows)
 		{
-			_tablet.Add(TabletItem.FromJson(d));
+			TabletItem item = TabletItem.FromJson(d);
+			item.Location = Path.Combine(_gs.Root ?? "", item.Folder ?? "", item.Gid.ToString());
+			_tablet.Add(item);
 		}
 		foreach (TabletItem it in _tablet.Where(i => selected.Contains(i.Gid)))
 		{
@@ -390,6 +394,86 @@ public partial class MainWindow
 			FooterStatus.Text = $"已排队重新识别 {sel.Count} 本";
 		}
 		TabletRefresh();
+	}
+
+	private string TabletPromptTemplate => string.IsNullOrWhiteSpace(_gs.TabletPrompt) ? TabletPrompt.DefaultTemplate : _gs.TabletPrompt;
+
+	/// <summary>点的是哪一行：行里的按钮取自己那一行，右键菜单取选中的那一行。</summary>
+	private TabletItem TabletRowOf(object sender) => (sender as FrameworkElement)?.DataContext as TabletItem ?? TabletGrid.SelectedItem as TabletItem;
+
+	/// <summary>列表每一行的「复制提示词」：按模板生成这一本的提示词复制到剪贴板。</summary>
+	private void TabletRowPrompt_Click(object sender, RoutedEventArgs e)
+	{
+		if (TabletRowOf(sender) is TabletItem item)
+		{
+			CopyTabletText(TabletPrompt.Fill(TabletPromptTemplate, _gs.Root, item), $"「{item.Title}」的提示词");
+		}
+	}
+
+	private void TabletCopyGid_Click(object sender, RoutedEventArgs e)
+	{
+		if (TabletRowOf(sender) is TabletItem item)
+		{
+			CopyTabletText(item.Gid.ToString(), "编号 " + item.Gid);
+		}
+	}
+
+	private void TabletCopyTitle_Click(object sender, RoutedEventArgs e)
+	{
+		if (TabletRowOf(sender) is TabletItem item)
+		{
+			CopyTabletText(item.Title ?? "", "标题");
+		}
+	}
+
+	private void TabletCopyBoth_Click(object sender, RoutedEventArgs e)
+	{
+		if (TabletRowOf(sender) is TabletItem item)
+		{
+			CopyTabletText($"{item.Gid} {item.Title}", "编号和标题");
+		}
+	}
+
+	private void TabletCopyLocation_Click(object sender, RoutedEventArgs e)
+	{
+		if (TabletRowOf(sender) is TabletItem item)
+		{
+			CopyTabletText(item.Location ?? "", "文件位置");
+		}
+	}
+
+	private void TabletRowOpen_Click(object sender, RoutedEventArgs e)
+	{
+		if (TabletRowOf(sender) is TabletItem item && !string.IsNullOrEmpty(item.Location))
+		{
+			OpenTabletPath(item.Location);
+		}
+	}
+
+	private void CopyTabletText(string text, string what)
+	{
+		try
+		{
+			Clipboard.SetText(text);
+			FooterStatus.Text = "已复制" + what;
+		}
+		catch (Exception ex)
+		{
+			FooterStatus.Text = "复制失败（剪贴板被别的程序占用？）：" + ex.Message;
+		}
+	}
+
+	private void TabletPromptTemplate_Click(object sender, RoutedEventArgs e)
+	{
+		PromptWindow dlg = new PromptWindow(TabletPromptTemplate) { Owner = this };
+		if (dlg.ShowDialog() != true)
+		{
+			return;
+		}
+		string t = dlg.Template.Trim();
+		_gs.TabletPrompt = t.Length == 0 || t == TabletPrompt.DefaultTemplate.Trim() ? null : t;
+		SaveGui();
+		FooterStatus.Text = "提示词模板已保存";
 	}
 
 	private async void TabletRemove_Click(object sender, RoutedEventArgs e)
