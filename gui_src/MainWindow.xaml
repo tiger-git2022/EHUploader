@@ -684,7 +684,6 @@
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
-                                    <DataGridTextColumn Header="译图" Binding="{Binding Progress}" Width="80"/>
                                     <DataGridTextColumn Header="状态" Binding="{Binding StateText}" Width="200">
                                         <DataGridTextColumn.ElementStyle>
                                             <Style TargetType="TextBlock">
