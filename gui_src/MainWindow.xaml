@@ -651,16 +651,39 @@
                             </WrapPanel>
                             <DataGrid x:Name="TabletGrid" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" CanUserAddRows="False"
                                       SelectionMode="Extended" MouseDoubleClick="TabletGrid_DoubleClick">
+                                <DataGrid.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="复制编号" Click="TabletCopyGid_Click"/>
+                                        <MenuItem Header="复制标题" Click="TabletCopyTitle_Click"/>
+                                        <MenuItem Header="复制「编号 标题」" Click="TabletCopyBoth_Click"/>
+                                        <MenuItem Header="复制文件位置" Click="TabletCopyLocation_Click"/>
+                                        <MenuItem Header="复制提示词" Click="TabletRowPrompt_Click"/>
+                                        <Separator/>
+                                        <MenuItem Header="打开翻译文件夹" Click="TabletOpenWork_Click"/>
+                                        <MenuItem Header="打开作品文件夹" Click="TabletOpenItem_Click"/>
+                                    </ContextMenu>
+                                </DataGrid.ContextMenu>
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="原画廊" Binding="{Binding Gid}" Width="90"/>
-                                    <DataGridTextColumn Header="标题" Binding="{Binding Title}" Width="*">
-                                        <DataGridTextColumn.ElementStyle>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="TextWrapping" Value="Wrap"/>
-                                                <Setter Property="Margin" Value="0,4"/>
-                                            </Style>
-                                        </DataGridTextColumn.ElementStyle>
-                                    </DataGridTextColumn>
+                                    <DataGridTemplateColumn Header="原画廊" Width="120" SortMemberPath="Gid">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Gid}" VerticalAlignment="Center"/>
+                                                    <ui:Button Icon="{ui:SymbolIcon Copy24}" Appearance="Transparent" Padding="4" Margin="4,0,0,0" VerticalAlignment="Center" Click="TabletCopyGid_Click" ToolTip="复制编号"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header="标题" Width="*" SortMemberPath="Title">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <DockPanel>
+                                                    <ui:Button DockPanel.Dock="Right" Icon="{ui:SymbolIcon Copy24}" Appearance="Transparent" Padding="4" Margin="4,0,0,0" VerticalAlignment="Center" Click="TabletCopyTitle_Click" ToolTip="复制标题"/>
+                                                    <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Margin="0,4" VerticalAlignment="Center"/>
+                                                </DockPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
                                     <DataGridTextColumn Header="批次" Binding="{Binding Folder}" Width="110"/>
                                     <DataGridTextColumn Header="译图" Binding="{Binding Progress}" Width="80"/>
                                     <DataGridTextColumn Header="状态" Binding="{Binding StateText}" Width="260">
@@ -671,7 +694,26 @@
                                             </Style>
                                         </DataGridTextColumn.ElementStyle>
                                     </DataGridTextColumn>
-                                    <DataGridTemplateColumn Header="提示词" Width="Auto">
+                                    <DataGridTemplateColumn Header="文件位置" Width="200" SortMemberPath="Location">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <DockPanel>
+                                                    <ui:Button DockPanel.Dock="Right" Icon="{ui:SymbolIcon FolderOpen24}" Appearance="Transparent" Padding="4" Margin="2,0,0,0" VerticalAlignment="Center"
+                                                               Click="TabletRowOpen_Click" ToolTip="打开这个文件夹"/>
+                                                    <ui:Button DockPanel.Dock="Right" Icon="{ui:SymbolIcon Copy24}" Appearance="Transparent" Padding="4" Margin="4,0,0,0" VerticalAlignment="Center" Click="TabletCopyLocation_Click" ToolTip="复制文件位置"/>
+                                                    <TextBlock Text="{Binding Location}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Location}" VerticalAlignment="Center"/>
+                                                </DockPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Width="Auto">
+                                        <DataGridTemplateColumn.Header>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="提示词" VerticalAlignment="Center"/>
+                                                <ui:Button Icon="{ui:SymbolIcon Edit24}" Appearance="Transparent" Padding="4" Margin="4,0,0,0"
+                                                           Click="TabletPromptTemplate_Click" ToolTip="编辑提示词模板"/>
+                                            </StackPanel>
+                                        </DataGridTemplateColumn.Header>
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
                                                 <ui:Button Content="复制提示词" Icon="{ui:SymbolIcon Copy24}" Appearance="Transparent" Padding="8,3"
