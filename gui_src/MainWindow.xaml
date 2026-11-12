@@ -626,7 +626,8 @@
                                         <StackPanel>
                                             <TextBlock Text="解压后自动识别原文"/>
                                             <TextBlock Style="{StaticResource Muted}"
-                                                       Text="用 config.toml 里 mtu_dir 的 manga-translator-ui 跑一遍「导出原文」（只识别，不翻译、不嵌字），结果在作品的 manga_translator_work 里"/>
+                                                       Text="用设置页里的 manga-translator-ui 跑一遍「导出原文」（只识别，不翻译、不嵌字），结果在作品的 manga_translator_work 里"/>
+                                            <TextBlock x:Name="TabletOcrState" Style="{StaticResource Muted}" TextWrapping="Wrap"/>
                                         </StackPanel>
                                     </ui:CardControl.Header>
                                     <ui:ToggleSwitch x:Name="TabletOcr" Click="TabletOcr_Click"/>
@@ -807,6 +808,18 @@
                                     </ui:CardControl.Header>
                                     <ui:TextBox x:Name="PythonPath" Width="340"/>
                                 </ui:CardControl>
+                                <ui:CardControl Icon="{ui:SymbolIcon ScanText24}">
+                                    <ui:CardControl.Header>
+                                        <StackPanel>
+                                            <TextBlock Text="manga-translator-ui 目录"/>
+                                            <TextBlock Text="平板收发用它识别原文、渲染译图，上传时用它识别目次页；里面要有 .venv\Scripts\python.exe。留空则不识别" Style="{StaticResource Muted}"/>
+                                        </StackPanel>
+                                    </ui:CardControl.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <ui:TextBox x:Name="MtuPath" Width="340" Margin="0,0,8,0" TextChanged="MtuPath_TextChanged"/>
+                                        <ui:Button Content="浏览…" Click="BrowseMtu_Click"/>
+                                    </StackPanel>
+                                </ui:CardControl>
 
                                 <TextBlock Text="外观" Style="{StaticResource Section}"/>
                                 <ui:CardControl Icon="{ui:SymbolIcon DarkTheme24}" Header="主题">
@@ -840,6 +853,21 @@
                                         <Slider x:Name="TintSlider" Width="200" Minimum="0" Maximum="100" SmallChange="1" LargeChange="10"
                                                 IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center" ValueChanged="Tint_Changed"/>
                                         <TextBlock x:Name="TintText" Width="44" TextAlignment="Right" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    </StackPanel>
+                                </ui:CardControl>
+
+                                <TextBlock Text="关于" Style="{StaticResource Section}"/>
+                                <ui:CardControl Icon="{ui:SymbolIcon ArrowSync24}">
+                                    <ui:CardControl.Header>
+                                        <StackPanel>
+                                            <TextBlock x:Name="AboutVersion" Text="EH 上传助手"/>
+                                            <TextBlock x:Name="AboutUpdate" Style="{StaticResource Muted}" TextWrapping="Wrap"
+                                                       Text="启动 20 秒后和之后每 12 小时自动检查一次，有新版本时托盘会提示"/>
+                                        </StackPanel>
+                                    </ui:CardControl.Header>
+                                    <StackPanel Orientation="Horizontal">
+                                        <ui:Button Content="更新日志" Icon="{ui:SymbolIcon Document24}" Margin="0,0,8,0" Click="OpenReleases_Click"/>
+                                        <ui:Button x:Name="CheckUpdateButton" Content="检查更新" Appearance="Primary" Icon="{ui:SymbolIcon ArrowSync24}" Click="CheckUpdate_Click"/>
                                     </StackPanel>
                                 </ui:CardControl>
                             </StackPanel>
