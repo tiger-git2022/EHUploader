@@ -450,14 +450,6 @@ public partial class MainWindow
 		}
 	}
 
-	private void TabletRowOpen_Click(object sender, RoutedEventArgs e)
-	{
-		if (TabletRowOf(sender) is TabletItem item && !string.IsNullOrEmpty(item.Location))
-		{
-			OpenTabletPath(item.Location);
-		}
-	}
-
 	private void CopyTabletText(string text, string what)
 	{
 		try

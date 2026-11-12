@@ -694,8 +694,6 @@
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
                                                 <DockPanel>
-                                                    <ui:Button DockPanel.Dock="Right" Icon="{ui:SymbolIcon FolderOpen24}" Appearance="Transparent" Padding="4" Margin="2,0,0,0" VerticalAlignment="Center"
-                                                               Click="TabletRowOpen_Click" ToolTip="打开这个文件夹"/>
                                                     <ui:Button DockPanel.Dock="Right" Icon="{ui:SymbolIcon Copy24}" Appearance="Transparent" Padding="4" Margin="4,0,0,0" VerticalAlignment="Center" Click="TabletCopyLocation_Click" ToolTip="复制文件位置"/>
                                                     <TextBlock Text="{Binding Location}" TextWrapping="Wrap" Margin="0,4" VerticalAlignment="Center"/>
                                                 </DockPanel>
