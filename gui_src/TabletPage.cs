@@ -45,7 +45,15 @@ public sealed class TabletItem
 	public int Pages { get; set; }
 	public int Translated { get; set; }
 	public string Progress => Pages > 0 ? $"{Translated}/{Pages}" : (Translated > 0 ? Translated.ToString() : "");
-	public string StateText => string.IsNullOrEmpty(Message) || State == "taken" ? (States.TryGetValue(State ?? "", out string s) ? s : State) : Message;
+	public string StateText
+	{
+		get
+		{
+			string text = string.IsNullOrEmpty(Message) || State == "taken" ? (States.TryGetValue(State ?? "", out string s) ? s : State) : Message;
+			// 列表没有「译图」列了：等翻译时已经译了几页，写在状态后面
+			return State == "waiting" && Translated > 0 ? $"{text}（已译 {Progress}）" : text;
+		}
+	}
 
 	public static TabletItem FromJson(Dictionary<string, object> d) => new TabletItem
 	{
@@ -439,14 +447,6 @@ public partial class MainWindow
 		if (TabletRowOf(sender) is TabletItem item)
 		{
 			CopyTabletText(item.Location ?? "", "文件位置");
-		}
-	}
-
-	private void TabletRowOpen_Click(object sender, RoutedEventArgs e)
-	{
-		if (TabletRowOf(sender) is TabletItem item && !string.IsNullOrEmpty(item.Location))
-		{
-			OpenTabletPath(item.Location);
 		}
 	}
 
