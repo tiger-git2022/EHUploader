@@ -1231,10 +1231,42 @@ public partial class MainWindow : FluentWindow
 		};
 		_updateTimer.Start();
 		Closed += delegate { _updateTimer.Stop(); };
+		UpdateAbout();
 	}
 
-	/// <summary>manual=true：用户点了菜单，结果都要告诉用户，有新版本就问要不要更新；false：后台检查，只在发现新版本时弹一次提示。</summary>
+	private async void CheckUpdate_Click(object sender, RoutedEventArgs e) => await CheckUpdates(manual: true);
+
+	private void OpenReleases_Click(object sender, RoutedEventArgs e) =>
+		Process.Start(new ProcessStartInfo("https://github.com/" + Updater.Repo + "/releases") { UseShellExecute = true });
+
+	/// <summary>设置页「关于」：版本号、上次检查的结果，检查或下载时按钮变灰。</summary>
+	private void UpdateAbout()
+	{
+		AboutVersion.Text = "EH 上传助手 v" + AppVersion;
+		CheckUpdateButton.IsEnabled = _updateStatus == null;
+		CheckUpdateButton.Content = _update != null ? $"更新到 v{_update.Version}" : "检查更新";
+		AboutUpdate.Text = _updateStatus
+			?? (_update != null ? $"有新版本 v{_update.Version}，点右边的按钮下载并更新，更新完会自动重新打开"
+				: _updateChecked != null ? $"已经是最新版本（{_updateChecked:HH:mm} 检查）；之后每 12 小时自动检查一次"
+				: "启动 20 秒后和之后每 12 小时自动检查一次，有新版本时托盘会提示");
+	}
+
+	private DateTime? _updateChecked;
+
+	/// <summary>manual=true：用户点了菜单或按钮，结果都要告诉用户，有新版本就问要不要更新；false：后台检查，只在发现新版本时弹一次提示。</summary>
 	private async Task CheckUpdates(bool manual)
+	{
+		try
+		{
+			await CheckUpdatesCore(manual);
+		}
+		finally
+		{
+			UpdateAbout();
+		}
+	}
+
+	private async Task CheckUpdatesCore(bool manual)
 	{
 		if (_updateStatus != null)
 		{
@@ -1243,9 +1275,11 @@ public partial class MainWindow : FluentWindow
 		// 后台也每次都重新查：期间又出了更新的版本时能提示最新的那个
 		{
 			_updateStatus = "正在检查更新…";
+			UpdateAbout();
 			try
 			{
 				_update = await Updater.CheckAsync();
+				_updateChecked = DateTime.Now;
 			}
 			catch (Exception ex)
 			{
@@ -1302,7 +1336,11 @@ public partial class MainWindow : FluentWindow
 		_updateStatus = "正在下载更新… 0%";
 		try
 		{
-			var progress = new Progress<int>(p => _updateStatus = $"正在下载更新… {p}%");
+			var progress = new Progress<int>(p =>
+			{
+				_updateStatus = $"正在下载更新… {p}%";
+				UpdateAbout();
+			});
 			string zip = await Updater.DownloadAsync(update, progress);
 			if (_uploading)
 			{
@@ -1833,6 +1871,8 @@ public partial class MainWindow : FluentWindow
 		BatchMb.Value = Json.Num(ev, "batch_max_mb");
 		Headless.IsChecked = Json.Bool(ev, "headless");
 		BrowserPath.Text = Json.Str(ev, "browser_path");
+		MtuPath.Text = Json.Str(ev, "mtu_dir");
+		UpdateTabletOcrState();
 	}
 
 	private async void Save_Click(object sender, RoutedEventArgs e) => await SaveSettings();
@@ -1865,6 +1905,7 @@ public partial class MainWindow : FluentWindow
 			["batch_max_mb"] = (int)(BatchMb.Value ?? 400),
 			["headless"] = Headless.IsChecked == true,
 			["browser_path"] = BrowserPath.Text.Trim(),
+			["mtu_dir"] = MtuPath.Text.Trim(),
 		};
 		string tmp = Path.Combine(Path.GetTempPath(), "eh_upload_config.json");
 		File.WriteAllText(tmp, Json.Serialize(cfg), new UTF8Encoding(false));
@@ -1911,6 +1952,28 @@ public partial class MainWindow : FluentWindow
 		{
 			RootPath.Text = dlg.SelectedPath;
 		}
+	}
+
+	private void BrowseMtu_Click(object sender, RoutedEventArgs e)
+	{
+		using System.Windows.Forms.FolderBrowserDialog dlg = new System.Windows.Forms.FolderBrowserDialog { SelectedPath = MtuPath.Text };
+		if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+		{
+			MtuPath.Text = dlg.SelectedPath;
+		}
+	}
+
+	private void MtuPath_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e) => UpdateTabletOcrState();
+
+	/// <summary>manga-translator-ui 能不能用：找不到时的原因，能用时 null（和 tablet_bridge.py 的 mtu_python 一样判断）。</summary>
+	private string MtuProblem()
+	{
+		string dir = MtuPath.Text.Trim();
+		if (dir.Length == 0)
+		{
+			return "没设置 manga-translator-ui 目录";
+		}
+		return File.Exists(Path.Combine(dir, ".venv", "Scripts", "python.exe")) ? null : dir + " 里没有 .venv\\Scripts\\python.exe";
 	}
 
 	private void BrowseBrowser_Click(object sender, RoutedEventArgs e)

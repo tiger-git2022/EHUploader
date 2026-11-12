@@ -90,6 +90,22 @@ def mtu_dir() -> Path | None:
     return Path(v) if v else None
 
 
+def mtu_python() -> tuple[Path | None, str | None]:
+    """manga-translator-ui 的 python.exe，和找不到时的原因。"""
+    mtu = mtu_dir()
+    if not mtu:
+        return None, "没设置 manga-translator-ui 目录（设置页，或 config.toml 的 mtu_dir）"
+    py = mtu / ".venv" / "Scripts" / "python.exe"
+    if not py.exists():
+        return None, f"{mtu} 里没有 .venv\\Scripts\\python.exe"
+    return py, None
+
+
+def elapsed(start: float) -> str:
+    s = int(time.time() - start)
+    return f"{s // 3600}:{s // 60 % 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
+
+
 def is_image(name: str) -> bool:
     n = name.replace("\\", "/").rsplit("/", 1)[-1]
     return Path(n).suffix.lower() in IMAGE_EXTS and not TMP_CROP.match(n) and not n.startswith(".")
@@ -245,33 +261,38 @@ class Bridge:
         self.changed()
         work.mkdir(parents=True, exist_ok=True)
         n = 0
+        shown = time.monotonic()
         with zipfile.ZipFile(cbz) as z:
-            for e in z.infolist():
-                if e.is_dir() or not is_image(e.filename):
-                    continue
+            entries = [e for e in z.infolist() if not e.is_dir() and is_image(e.filename)]
+            for e in entries:
                 name = safe_name(e.filename.replace("\\", "/").rsplit("/", 1)[-1])
                 with z.open(e) as src, (work / name).open("wb") as dst:
                     shutil.copyfileobj(src, dst, 1 << 20)
                 n += 1
+                if time.monotonic() - shown >= 0.5:
+                    shown = time.monotonic()
+                    self.state.update(gid, save=False, message=f"正在解压 {n}/{len(entries)} 页")
+                    self.changed()
         log(f"{gid} 解压 {n} 张 → {work}")
         self.state.update(gid, pages=n)
-        py = (mtu_dir() / ".venv" / "Scripts" / "python.exe") if mtu_dir() else None
-        if self.ocr and py and py.exists():
+        py, problem = mtu_python()
+        if self.ocr and py:
             self.jobs.put(("ocr", gid))
-            self.state.update(gid, state="ocr_queued", message="等待识别原文")
+            self.state.update(gid, state="ocr_queued", message="已解压，等待识别原文")
         else:
-            self.state.update(gid, state="waiting", message="等你翻译" if not self.ocr or not py
-                              else "等你翻译（没找到 manga-translator-ui，没有自动识别原文）")
-            emit("tablet_notice", text=f"收到 {it.get('title') or gid}，已解压到 {it['folder']}\\{gid}")
+            # 打开了自动识别却跑不了：写明原因，不能只说「等你翻译」
+            self.state.update(gid, state="waiting", message="等你翻译" if not self.ocr else f"没有自动识别原文：{problem}")
+            emit("tablet_notice", text=f"收到 {it.get('title') or gid}，已解压到 {it['folder']}\\{gid}"
+                 + ("" if not self.ocr else f"（没有自动识别原文：{problem}）"))
 
     def run_mtu(self, gid: str, work: Path, cli: dict, conf_name: str, extra: list[str] = (), no_translator: bool = False,
                 label: str = "", done=None) -> None:
         """跑一遍 manga-translator-ui 的命令行（local 模式），cli 是这次要用的工作流开关，其他设置照它自己的 config.json。
         done() 数出已经处理好几页，跑的时候每两秒更新一次状态（「label 12/30 页」）。"""
+        py, problem = mtu_python()
+        if not py:
+            raise RuntimeError(problem)
         mtu = mtu_dir()
-        py = mtu / ".venv" / "Scripts" / "python.exe" if mtu else None
-        if not py or not py.exists():
-            raise RuntimeError("没找到 manga-translator-ui（config.toml 的 mtu_dir）")
         conf = json.loads((mtu / "config" / "config.json").read_text(encoding="utf-8"))
         flags = dict(template=False, save_text=False, load_text=False, translate_json_only=False,
                      generate_and_export=False, replace_translation=False, export_from_local_json=False)
@@ -288,8 +309,9 @@ class Bridge:
             proc = subprocess.Popen([str(py), "-X", "utf8", "-m", "manga_translator", "local", "-i", str(work), "--config", str(conf_file), *extra],
                                     cwd=mtu, env=dict(os.environ, PYTHONUTF8="1"), stdout=f, stderr=subprocess.STDOUT,
                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            end = time.time() + 3 * 3600
-            last = -1
+            started = time.time()
+            end = started + 3 * 3600
+            last = None
             while True:
                 try:
                     code = proc.wait(timeout=2)
@@ -300,11 +322,15 @@ class Bridge:
                     proc.kill()
                     proc.wait()
                     raise RuntimeError("manga-translator-ui 跑了 3 个小时还没完，已停止")
-                if done and label:
-                    n = min(done(), total) if total else done()
-                    if n != last:
-                        last = n
-                        self.state.update(gid, message=f"{label} {n}/{total} 页" if total else f"{label} {n} 页")
+                if label:
+                    # 每两秒一次：页数加上已用时间，第一页出来前（加载模型）也看得出在跑
+                    n = (min(done(), total) if total else done()) if done else None
+                    pages = "" if n is None else (f" {n}/{total} 页" if total else f" {n} 页")
+                    wait = "，正在加载模型" if n == 0 else ""
+                    msg = f"{label}{pages}{wait} · 已用 {elapsed(started)}"
+                    if msg != last:
+                        last = msg
+                        self.state.update(gid, save=False, message=msg)
                         self.changed()
         if code != 0:
             tail = out_log.read_bytes().decode("utf-8", "replace").strip().splitlines()[-3:]
@@ -371,7 +397,7 @@ class Bridge:
         if not results:
             self.state.update(gid, state="waiting", message="还没有译图（manga_translator_work\\result 是空的）")
             return
-        self.state.update(gid, state="packing", message="正在打包")
+        self.state.update(gid, state="packing", message="正在写回 cbz")
         self.changed()
         orig = self.original(it)
         if not orig.exists():
@@ -382,12 +408,22 @@ class Bridge:
             others = [e for e in entries if not is_image(e.filename) and not TMP_CROP.match(Path(e.filename).name)]
             special = len(results) < len(images) * SPECIAL_RATIO
             tmp = cbz.with_name(cbz.name + ".tmp")
+            shown = [time.monotonic(), 0]
+            total = len(results) if special else len(images)
+
+            def step() -> None:
+                shown[1] += 1
+                if time.monotonic() - shown[0] >= 0.5:
+                    shown[0] = time.monotonic()
+                    self.state.update(gid, save=False, message=f"正在写回 cbz {shown[1]}/{total} 页")
+                    self.changed()
             with zipfile.ZipFile(tmp, "w", zipfile.ZIP_STORED) as out:
                 for e in others:
                     out.writestr(e, src.read(e))
                 if special:
                     for i, p in enumerate(results, 1):
                         out.write(p, f"{i:08d}{p.suffix.lower()}")
+                        step()
                     pages = len(results)
                 else:
                     by_stem = {p.stem.lower(): p for p in results}
@@ -401,6 +437,7 @@ class Bridge:
                             out.write(p, name)
                         else:
                             out.writestr(e, src.read(e))
+                        step()
                     for p in results:
                         if p not in used:
                             out.write(p, p.name)

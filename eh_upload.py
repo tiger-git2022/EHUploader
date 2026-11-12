@@ -110,7 +110,7 @@ CONFIG_DOCS = {
     "headless": "是否隐藏浏览器窗口",
     "browser_path": "自动化用的浏览器 exe（Chromium 内核），留空使用 Edge",
     "source_dir": "漫画根目录（命令行不给目录时扫描这里；EXE 用设置页里的目录）",
-    "mtu_dir": "本地 manga-translator-ui 目录，用来识别目次页的日文；留空则不识别",
+    "mtu_dir": "本地 manga-translator-ui 目录，用来识别目次页的日文、平板收发识别原文和渲染；留空则不识别",
     "att_config": "翻译 API 配置文件（含 [llm.clients.*]，用于罗马音标题等）；留空时用 source_dir 下的 att-mz/runtime/config.toml",
     "romaji_client": "上面配置文件里用哪个客户端，默认 extra",
 }

@@ -220,6 +220,24 @@ public partial class MainWindow
 		TabletBadgeText.Text = waiting.ToString();
 	}
 
+	/// <summary>识别开关下面：manga-translator-ui 找到没有，打开了却用不了时说清楚。</summary>
+	private void UpdateTabletOcrState()
+	{
+		if (TabletOcrState == null || _gs == null)
+		{
+			return;
+		}
+		string problem = MtuProblem();
+		if (problem == null)
+		{
+			TabletOcrState.Text = "已找到 manga-translator-ui：" + MtuPath.Text.Trim();
+		}
+		else
+		{
+			TabletOcrState.Text = (_gs.TabletOcr ? "⚠ 现在不会识别：" : "") + problem + "。在「设置」里选好目录并保存";
+		}
+	}
+
 	private void UpdateTabletStatus()
 	{
 		bool running = _tabletBackend != null && _tabletBackend.Running;
@@ -320,6 +338,7 @@ public partial class MainWindow
 	{
 		_gs.TabletOcr = TabletOcr.IsChecked == true;
 		SaveGui();
+		UpdateTabletOcrState();
 		if (_gs.TabletEnabled)
 		{
 			StopTablet();
