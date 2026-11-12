@@ -1973,7 +1973,9 @@ public partial class MainWindow : FluentWindow
 		{
 			return "没设置 manga-translator-ui 目录";
 		}
-		return File.Exists(Path.Combine(dir, ".venv", "Scripts", "python.exe")) ? null : dir + " 里没有 .venv\\Scripts\\python.exe";
+		return File.Exists(Path.Combine(dir, "packaging", "python", "python.exe")) || File.Exists(Path.Combine(dir, ".venv", "Scripts", "python.exe"))
+			? null
+			: dir + " 里没有 packaging\\python\\python.exe 或 .venv\\Scripts\\python.exe";
 	}
 
 	private void BrowseBrowser_Click(object sender, RoutedEventArgs e)
