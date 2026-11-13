@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -9,14 +10,20 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using MessageBox = System.Windows.MessageBox;
 
 namespace EHUploader;
 
 /// <summary>One work sent from the tablet (a row of tablet_bridge.py's list).</summary>
-public sealed class TabletItem
+public sealed class TabletItem : INotifyPropertyChanged
 {
+	private ImageSource _cover;
+
+	public event PropertyChangedEventHandler PropertyChanged;
+
 	private static readonly Dictionary<string, string> States = new Dictionary<string, string>
 	{
 		["receiving"] = "接收中",
@@ -45,6 +52,16 @@ public sealed class TabletItem
 	public string Message { get; set; }
 	public int Pages { get; set; }
 	public int Translated { get; set; }
+	/// <summary>封面：解压出的第一页缩略图，后台读好后才填上。</summary>
+	public ImageSource Cover
+	{
+		get => _cover;
+		set
+		{
+			_cover = value;
+			PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Cover)));
+		}
+	}
 	/// <summary>排队或正在识别原文、渲染：状态旁显示「停止」按钮。</summary>
 	public Visibility StopVisibility => State is "ocr_queued" or "ocr" or "render_queued" or "rendering" ? Visibility.Visible : Visibility.Collapsed;
 	public string Progress => Pages > 0 ? $"{Translated}/{Pages}" : (Translated > 0 ? Translated.ToString() : "");
@@ -84,6 +101,11 @@ public partial class MainWindow
 	private string _tabletError;
 	private bool _tabletBalloon;
 	private bool _tabletStopping;
+	/// <summary>封面缩略图按编号缓存；读不到的记下时间，过一会儿再试（可能还没解压）。</summary>
+	private static readonly Dictionary<long, ImageSource> TabletCovers = new Dictionary<long, ImageSource>();
+	private static readonly Dictionary<long, DateTime> TabletCoverMissed = new Dictionary<long, DateTime>();
+	private static readonly HashSet<long> TabletCoverLoading = new HashSet<long>();
+	private static readonly string[] CoverExts = { ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp" };
 
 	private string TabletLocal => $"http://127.0.0.1:{_gs.TabletPort}/local/";
 
@@ -224,6 +246,7 @@ public partial class MainWindow
 		{
 			TabletItem item = TabletItem.FromJson(d);
 			item.Location = Path.Combine(_gs.Root ?? "", item.Folder ?? "", item.Gid.ToString());
+			LoadTabletCover(item);
 			_tablet.Add(item);
 		}
 		foreach (TabletItem it in _tablet.Where(i => selected.Contains(i.Gid)))
@@ -233,6 +256,76 @@ public partial class MainWindow
 		int waiting = _tablet.Count(i => i.State == "waiting");
 		TabletBadge.Visibility = waiting > 0 ? Visibility.Visible : Visibility.Collapsed;
 		TabletBadgeText.Text = waiting.ToString();
+	}
+
+	/// <summary>封面用解压出的第一页（文件名按长度再按字典序，和页码顺序一致），在后台读成小图。</summary>
+	private void LoadTabletCover(TabletItem item)
+	{
+		long gid = item.Gid;
+		if (TabletCovers.TryGetValue(gid, out ImageSource cached))
+		{
+			item.Cover = cached;
+			return;
+		}
+		// 还在收、在解压：第一页可能只写了一半，等解压完再读
+		if (item.State is "receiving" or "extract_queued" or "extracting" || TabletCoverLoading.Contains(gid)
+			|| (TabletCoverMissed.TryGetValue(gid, out DateTime missed) && DateTime.Now - missed < TimeSpan.FromSeconds(30)))
+		{
+			return;
+		}
+		string dir = item.Location;
+		TabletCoverLoading.Add(gid);
+		Task.Run(delegate
+		{
+			ImageSource image = null;
+			try
+			{
+				if (Directory.Exists(dir))
+				{
+					foreach (string file in Directory.EnumerateFiles(dir)
+						.Where(f => CoverExts.Contains(Path.GetExtension(f).ToLowerInvariant()) && !Path.GetFileName(f).StartsWith("."))
+						.OrderBy(f => Path.GetFileName(f).Length).ThenBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase)
+						.Take(3))
+					{
+						try
+						{
+							BitmapImage bmp = new BitmapImage();
+							bmp.BeginInit();
+							bmp.CacheOption = BitmapCacheOption.OnLoad;
+							bmp.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+							bmp.DecodePixelWidth = 120;
+							bmp.UriSource = new Uri(file);
+							bmp.EndInit();
+							bmp.Freeze();
+							image = bmp;
+							break;
+						}
+						catch (Exception)
+						{
+							// 这张读不了（比如系统没有 webp 解码器）：换下一张
+						}
+					}
+				}
+			}
+			catch (Exception)
+			{
+			}
+			Dispatcher.BeginInvoke(new Action(delegate
+			{
+				TabletCoverLoading.Remove(gid);
+				if (image == null)
+				{
+					TabletCoverMissed[gid] = DateTime.Now;
+					return;
+				}
+				TabletCovers[gid] = image;
+				TabletCoverMissed.Remove(gid);
+				foreach (TabletItem it in _tablet.Where(i => i.Gid == gid))
+				{
+					it.Cover = image;
+				}
+			}));
+		});
 	}
 
 	/// <summary>识别开关下面：manga-translator-ui 找到没有，打开了却用不了时说清楚。</summary>

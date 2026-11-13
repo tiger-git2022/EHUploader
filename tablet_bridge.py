@@ -762,14 +762,39 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(size))
             self.send_header("X-Pages", str(it.get("pages") or 0))
             self.end_headers()
-            with cbz.open("rb") as f:
-                shutil.copyfileobj(f, self.wfile, 1 << 20)
+            # 边发边在列表里显示进度（和接收时一样，半秒更新一次，不写文件）
+            ready = it.get("message")
+            done = 0
+            shown = 0.0
+            try:
+                with cbz.open("rb") as f:
+                    while chunk := f.read(1 << 20):
+                        self.wfile.write(chunk)
+                        done += len(chunk)
+                        if time.monotonic() - shown >= 0.5 or done == size:
+                            shown = time.monotonic()
+                            b.state.update(gid, save=False, message=f"{device} 正在取回 {human_size(done)}/{human_size(size)}（{done * 100 // max(size, 1)}%）")
+                            b.changed()
+            except OSError:   # 平板断开了：恢复原来的提示，它下次会重新取
+                b.state.update(gid, message=f"{device} 取回中断了，平板会再来取" if done else ready)
+                b.changed()
+                raise
+            b.state.update(gid, save=False, message=f"已发给 {device}，等它确认收好")
+            b.changed()
             return
         if rest == ["taken"] and method == "POST":
             b.state.update(gid, state="taken", message=f"{device} 已取回")
             emit("tablet_notice", text=f"{device} 已取回 {it.get('title') or gid}")
             b.changed()
             return self.send_json(b.view(it))
+        if rest == ["failed"] and method == "POST":
+            # The tablet could not take the result back (network, disk full...): show why here; the file stays,
+            # and the tablet takes it again the next time the app or its 「电脑翻译」 page opens
+            reason = str(self.body_json().get("message") or "").strip()[:200] or "原因不明"
+            b.state.update(gid, message=f"{device} 取回失败：{reason}（平板下次打开「电脑翻译」会再取）")
+            emit("tablet_notice", text=f"{device} 取回 {it.get('title') or gid} 失败：{reason}")
+            b.changed()
+            return self.send_json({"ok": True})
         if not rest and method == "DELETE":
             b.state.update(gid, hidden=True, message=f"{device} 撤销了")
             log(f"{device} 撤销了 {gid}（文件留在 {it['folder']}\\{it['dir']}）")
