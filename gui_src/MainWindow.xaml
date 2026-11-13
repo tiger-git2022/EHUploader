@@ -682,14 +682,18 @@
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
-                                    <DataGridTextColumn Header="状态" Binding="{Binding StateText}" Width="200">
-                                        <DataGridTextColumn.ElementStyle>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="TextWrapping" Value="Wrap"/>
-                                                <Setter Property="Margin" Value="0,4"/>
-                                            </Style>
-                                        </DataGridTextColumn.ElementStyle>
-                                    </DataGridTextColumn>
+                                    <DataGridTemplateColumn Header="状态" Width="220" SortMemberPath="StateText">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Margin="0,4" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding StateText}" TextWrapping="Wrap"/>
+                                                    <ui:Button Content="停止" Icon="{ui:SymbolIcon Stop24}" Padding="8,2" Margin="0,4,0,0" HorizontalAlignment="Left"
+                                                               Visibility="{Binding StopVisibility}" Click="TabletRowStop_Click"
+                                                               ToolTip="停下这一本的识别原文或渲染；做好的页留着，下次再点从没做完的页接着做"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
                                     <DataGridTemplateColumn Header="文件位置" Width="260" SortMemberPath="Location">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
