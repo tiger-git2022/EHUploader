@@ -31,6 +31,7 @@ public sealed class TabletItem
 		["packing"] = "打包中",
 		["ready"] = "已打包，等平板取回",
 		["taken"] = "平板已取回",
+		["stopped"] = "已停止",
 		["error"] = "出错",
 	};
 
@@ -44,6 +45,8 @@ public sealed class TabletItem
 	public string Message { get; set; }
 	public int Pages { get; set; }
 	public int Translated { get; set; }
+	/// <summary>排队或正在识别原文、渲染：状态旁显示「停止」按钮。</summary>
+	public Visibility StopVisibility => State is "ocr_queued" or "ocr" or "render_queued" or "rendering" ? Visibility.Visible : Visibility.Collapsed;
 	public string Progress => Pages > 0 ? $"{Translated}/{Pages}" : (Translated > 0 ? Translated.ToString() : "");
 	public string StateText
 	{
@@ -408,6 +411,15 @@ public partial class MainWindow
 
 	/// <summary>点的是哪一行：行里的按钮取自己那一行，右键菜单取选中的那一行。</summary>
 	private TabletItem TabletRowOf(object sender) => (sender as FrameworkElement)?.DataContext as TabletItem ?? TabletGrid.SelectedItem as TabletItem;
+
+	/// <summary>状态旁的「停止」：结束这一本正在跑的识别原文或渲染（或取消排队），下次再点从没做完的页接着做。</summary>
+	private async void TabletRowStop_Click(object sender, RoutedEventArgs e)
+	{
+		if (TabletRowOf(sender) is TabletItem item && await TabletPost("stop", new Dictionary<string, object> { ["gids"] = new[] { item.Gid } }))
+		{
+			FooterStatus.Text = $"正在停止「{item.Title}」…";
+		}
+	}
 
 	/// <summary>列表每一行的「复制提示词」：按模板生成这一本的提示词复制到剪贴板。</summary>
 	private void TabletRowPrompt_Click(object sender, RoutedEventArgs e)

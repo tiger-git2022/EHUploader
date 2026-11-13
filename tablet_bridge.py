@@ -18,7 +18,10 @@
   GET  /api/items/{gid}/result            取回打包好的 cbz
   POST /api/items/{gid}/taken             平板已取回
   DELETE /api/items/{gid}                 平板撤销（文件留着，只是不再出现在列表里）
-  /local/*                                只接受本机（EXE 界面）的请求：列表、渲染、打包送回、移出列表、换配对码
+  /local/*                                只接受本机（EXE 界面）的请求：列表、渲染、打包送回、停止、移出列表、换配对码
+
+识别原文和渲染可以中途停止（或程序关掉时被打断），下次再点同一个按钮从没做完的页接着做：
+manga-translator-ui 不加 --overwrite 时会跳过已经有结果的页；渲染每页单独一批（batch_size=1），做完一页就落盘。
 """
 from __future__ import annotations
 
@@ -118,6 +121,57 @@ def mtu_device(out_log: Path) -> str | None:
     return None
 
 
+# manga-translator-ui 输出里能看出它在做什么的几行（找最后出现的那一种）
+MTU_STAGES = [
+    (" -- Downloading:", "正在下载模型"),
+    ("初始化翻译器", "正在加载模型"),
+    ("Loaded ", "读入译文"),
+    ("Running text detection", "找文字"),
+    ("Running ocr", "识别文字"),
+    ("Running mask refinement", "做蒙版"),
+    ("Running inpainting", "去掉原文"),
+    ("Inpainting resolution", "去掉原文"),
+    ("Running rendering", "嵌入译文"),
+    ("JSON saved to", "保存"),
+]
+MTU_PAGE = re.compile(r"Processing rolling batch \d+/\d+ \(images (\d+)-\d+\)")
+
+
+def mtu_progress(out_log: Path) -> tuple[int | None, str | None]:
+    """从 manga-translator-ui 的输出看出正在处理第几张（这次要处理的里面）、在做哪一步。"""
+    try:
+        with out_log.open("rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - (64 << 10)))
+            text = f.read().decode("utf-8", "replace")
+    except OSError:
+        return None, None
+    pages = MTU_PAGE.findall(text)
+    best = max(((text.rfind(k), v) for k, v in MTU_STAGES), default=(-1, None))
+    return (int(pages[-1]) if pages else None), (best[1] if best[0] >= 0 else None)
+
+
+def kill_tree(proc: subprocess.Popen) -> None:
+    """结束 manga-translator-ui 和它可能开的子进程。"""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    else:
+        proc.kill()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+
+class Stopped(Exception):
+    """在界面上点了「停止」。"""
+
+    def __init__(self, done: int, total: int):
+        super().__init__("已停止")
+        self.done, self.total = done, total
+
+
 def elapsed(start: float) -> str:
     s = int(time.time() - start)
     return f"{s // 3600}:{s // 60 % 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
@@ -193,6 +247,8 @@ class Bridge:
         self.code = ""
         self.bad_codes = 0
         self.jobs: Queue = Queue()
+        self.running: str | None = None   # 正在跑 manga-translator-ui 的那本
+        self.stop_requested: set[str] = set()
         self.seen: dict[str, float] = {}   # 平板令牌 -> 最近一次请求的时间
         self.new_code()
 
@@ -219,7 +275,7 @@ class Bridge:
     def view(self, it: dict) -> dict:
         """给平板和界面看的一条：状态加上当前译图数量。"""
         out = {k: it.get(k) for k in ("gid", "title", "folder", "dir", "state", "message", "pages", "translated", "device", "updated")}
-        if it.get("state") in ("waiting", "error", "ready", "taken"):
+        if it.get("state") in ("waiting", "error", "ready", "taken", "stopped"):
             out["translated_now"] = len(self.result_images(it))
         return out
 
@@ -243,12 +299,18 @@ class Bridge:
 
     # ---- 任务 ----
 
+    # 每种任务排队、运行时的状态；从队列取出时状态已经不是这些（比如排队时点了停止）就不做
+    JOB_STATES = {"extract": ("extract_queued", "extracting"), "ocr": ("ocr_queued", "ocr"),
+                  "pack": ("pack_queued", "packing"), "render": ("render_queued", "rendering")}
+    RESUME_BUTTON = {"ocr": ("识别原文", "重新识别原文"), "render": ("渲染", "渲染并送回")}
+
     def worker(self) -> None:
         while True:
             kind, gid = self.jobs.get()
             it = self.state.item(gid)
-            if not it:
+            if not it or it.get("state") not in self.JOB_STATES[kind]:
                 continue
+            self.stop_requested.discard(gid)
             try:
                 if kind == "extract":
                     self.extract(it)
@@ -258,6 +320,11 @@ class Bridge:
                     self.pack(it)
                 elif kind == "render":
                     self.render(it)
+            except Stopped as e:
+                what, button = self.RESUME_BUTTON[kind]
+                log(f"{gid} {what}已停止：{e.done}/{e.total} 页")
+                self.state.update(gid, state="stopped",
+                                  message=f"已停止{what}：完成 {e.done}/{e.total} 页，再点「{button}」从没做完的页接着做")
             except Exception as e:   # 一本出错不影响其他的
                 log(f"{gid} {kind} 出错：{e!r}")
                 what = {"extract": "解压", "ocr": "识别原文", "pack": "打包", "render": "渲染"}[kind]
@@ -305,7 +372,8 @@ class Bridge:
     def run_mtu(self, gid: str, work: Path, cli: dict, conf_name: str, extra: list[str] = (), no_translator: bool = False,
                 label: str = "", done=None) -> str | None:
         """跑一遍 manga-translator-ui 的命令行（local 模式），cli 是这次要用的工作流开关，其他设置照它自己的 config.json。
-        done() 数出已经处理好几页，跑的时候每两秒更新一次状态（「label 12/30 页 · GPU」）。返回这次用的是 GPU 还是 CPU。
+        done() 数出已经做完几页（包括以前做好、这次跳过的），跑的时候每两秒更新一次状态
+        （「label 12/30 页 · 第 13 页去掉原文 · GPU」）。返回这次用的是 GPU 还是 CPU。点了停止时抛出 Stopped。
         每次都是单独的进程，跑完进程退出，模型占的内存和显存随之释放。"""
         py, problem = mtu_python()
         if not py:
@@ -322,39 +390,54 @@ class Bridge:
         conf_file = CACHE_DIR / conf_name
         conf_file.write_text(json.dumps(conf, ensure_ascii=False), encoding="utf-8")
         total = len([p for p in work.iterdir() if p.is_file() and is_image(p.name)])
-        out_log = LOG_DIR / f"mtu_{Path(conf_name).stem}.log"   # 输出写文件，不用管道，免得输出太多卡住
+        out_log = LOG_DIR / f"mtu_{Path(conf_name).stem}_{gid}.log"   # 输出写文件，不用管道，免得输出太多卡住
         with out_log.open("wb") as f:
             # --use-gpu：不管 config.json 里开没开都用 GPU；torch 用不了 CUDA 时它自己退回 CPU（mtu_device 会看出来）
             proc = subprocess.Popen([str(py), "-X", "utf8", "-m", "manga_translator", "local", "-i", str(work), "--config", str(conf_file),
                                      "--use-gpu", *extra],
                                     cwd=mtu, env=dict(os.environ, PYTHONUTF8="1"), stdout=f, stderr=subprocess.STDOUT,
                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            started = time.time()
-            end = started + 3 * 3600
-            last = None
-            device = None
-            while True:
-                try:
-                    code = proc.wait(timeout=2)
-                    break
-                except subprocess.TimeoutExpired:
-                    pass
-                if time.time() > end:
-                    proc.kill()
-                    proc.wait()
-                    raise RuntimeError("manga-translator-ui 跑了 3 个小时还没完，已停止")
-                if not device or device == "GPU":   # 退回 CPU 的警告在「使用 GPU: True」之后才打印
-                    device = mtu_device(out_log) or device
-                if label:
-                    # 每两秒一次：页数加上已用时间，第一页出来前（加载模型）也看得出在跑
-                    n = (min(done(), total) if total else done()) if done else None
-                    pages = "" if n is None else (f" {n}/{total} 页" if total else f" {n} 页")
-                    wait = "，正在加载模型" if n == 0 else ""
-                    msg = f"{label}{pages}{wait}{f' · {device}' if device else ''} · 已用 {elapsed(started)}"
-                    if msg != last:
-                        last = msg
-                        self.state.update(gid, save=False, message=msg)
-                        self.changed()
+            self.running = gid
+            try:
+                started = time.time()
+                end = started + 6 * 3600
+                last = None
+                device = None
+                first = done() if done else 0   # 以前做好的页，这次会跳过
+                while True:
+                    try:
+                        code = proc.wait(timeout=2)
+                        break
+                    except subprocess.TimeoutExpired:
+                        pass
+                    if gid in self.stop_requested:
+                        kill_tree(proc)
+                        n = done() if done else 0
+                        raise Stopped(min(n, total) if total else n, total)
+                    if time.time() > end:
+                        kill_tree(proc)
+                        raise RuntimeError("manga-translator-ui 跑了 6 个小时还没完，已停止")
+                    if not device or device == "GPU":   # 退回 CPU 的警告在「使用 GPU: True」之后才打印
+                        device = mtu_device(out_log) or device
+                    if label:
+                        # 每两秒一次：做完几页、正在做第几页的哪一步、已用时间
+                        n = (min(done(), total) if total else done()) if done else None
+                        pages = "" if n is None else (f" {n}/{total} 页" if total else f" {n} 页")
+                        page, stage = mtu_progress(out_log)
+                        if page is not None:   # 它的编号只算这次要做的页，前面跳过的页加回去
+                            now = f" · 第 {min(first + page, total) if total else first + page} 页{stage or ''}"
+                        else:
+                            now = f" · {stage or '正在启动'}"
+                        msg = f"{label}{pages}{now}{f' · {device}' if device else ''} · 已用 {elapsed(started)}"
+                        if msg != last:
+                            last = msg
+                            self.state.update(gid, save=False, message=msg)
+                            self.changed()
+            finally:
+                self.running = None
+        if gid in self.stop_requested:   # 刚好在点停止时结束
+            n = done() if done else 0
+            raise Stopped(min(n, total) if total else n, total)
         if code != 0:
             tail = out_log.read_bytes().decode("utf-8", "replace").strip().splitlines()[-3:]
             raise RuntimeError(f"manga-translator-ui 退出码 {code}：{' / '.join(tail)}")
@@ -364,18 +447,21 @@ class Bridge:
         """用 manga-translator-ui 的「导出原文」模式识别整本（不翻译、不渲染），结果在 manga_translator_work 里。"""
         gid = str(it["gid"])
         _, _, work = self.paths(it)
-        self.state.update(gid, state="ocr", message="正在识别原文")
+        # 上次停止或被打断的接着识别（已经有原文的页跳过），否则全部重新识别
+        resume = it.get("partial") == "ocr"
+        self.state.update(gid, state="ocr", message="正在接着识别原文" if resume else "正在识别原文", partial="ocr")
         self.changed()
-        log(f"{gid} 用 manga-translator-ui 识别原文：{work}")
+        log(f"{gid} 用 manga-translator-ui {'接着' if resume else ''}识别原文：{work}")
         t = time.time()
         jdir = work / "manga_translator_work" / "json"
-        start = time.time() - 1
-        # 识别好一页就写一份 json（重新识别时旧的也在，只数这次写的）
+        start = 0 if resume else time.time() - 1
+        # 识别好一页就写一份 json（重新识别时旧的也在，只数这次写的；接着识别时以前的也算）
         done = lambda: sum(1 for p in jdir.glob("*_translations.json") if p.stat().st_mtime >= start) if jdir.is_dir() else 0
-        device = self.run_mtu(gid, work, dict(template=True, save_text=True, save_to_source_dir=True), "tablet_ocr.json",
-                              no_translator=True, label="正在识别原文", done=done)
+        device = self.run_mtu(gid, work, dict(template=True, save_text=True, save_to_source_dir=True, overwrite=not resume),
+                              "tablet_ocr.json", no_translator=True, label="正在识别原文", done=done)
         log(f"{gid} 识别原文完成（{device or '没看出用的 GPU 还是 CPU'}），用时 {int(time.time() - t)} 秒")
-        self.state.update(gid, state="waiting", message=f"原文已识别（{device + '，' if device else ''}用时 {elapsed(t)}），等你翻译")
+        self.state.update(gid, state="waiting", message=f"原文已识别（{device + '，' if device else ''}用时 {elapsed(t)}），等你翻译",
+                          partial=None)
         emit("tablet_notice", text=f"{it.get('title') or gid} 的原文识别好了，可以开始翻译")
 
     def render(self, it: dict) -> None:
@@ -387,32 +473,49 @@ class Bridge:
         if not jsons:
             self.state.update(gid, state="waiting", message="还没有识别原文（manga_translator_work\\json 是空的），先识别原文再翻译")
             return
-        self.state.update(gid, state="rendering", message=f"正在导入翻译并渲染（{len(jsons)} 页）")
-        self.changed()
-        # 命令行模式不会自己放进 result，先渲染到临时文件夹再挪过去
+        # 命令行模式不会自己放进 result，先渲染到临时文件夹，全部做完再挪过去。
+        # 上次停止或被打断时临时文件夹留着，这次跳过已经渲染好的页，接着渲染
         out = mtw / "_tablet_render"
-        shutil.rmtree(out, ignore_errors=True)
-        log(f"{gid} 用 manga-translator-ui 导入翻译并渲染：{work}")
-        t = time.time()
-        try:
-            done = lambda: sum(1 for p in out.rglob("*") if p.is_file() and is_image(p.name)) if out.is_dir() else 0
-            device = self.run_mtu(gid, work, dict(load_text=True, ignore_errors=True, batch_concurrent=False), "tablet_render.json",
-                                  ["-o", str(out), "--overwrite"], label="正在导入翻译并渲染", done=done)
-            made = [p for p in out.rglob("*") if p.is_file() and is_image(p.name)] if out.is_dir() else []
-            if not made:
-                raise RuntimeError("manga-translator-ui 没有渲染出图片，看看译文 TXT 是不是在 manga_translator_work\\originals 里")
-            res = mtw / "result"
-            res.mkdir(parents=True, exist_ok=True)
-            stems = {p.stem.lower() for p in made}
-            for old in res.iterdir():   # 换了输出格式时，同名旧译图（另一种扩展名）不能留着
-                if old.is_file() and is_image(old.name) and old.stem.lower() in stems:
-                    old.unlink()
-            for p in made:
-                os.replace(p, res / p.name)
-        finally:
+        resume = it.get("partial") == "render" and out.is_dir()
+        if resume:
+            self.drop_stale_renders(mtw, out)
+        else:
             shutil.rmtree(out, ignore_errors=True)
+        self.state.update(gid, state="rendering", message=f"正在{'接着' if resume else ''}导入翻译并渲染（{len(jsons)} 页）", partial="render")
+        self.changed()
+        log(f"{gid} 用 manga-translator-ui {'接着' if resume else ''}导入翻译并渲染：{work}")
+        t = time.time()
+        done = lambda: sum(1 for p in out.rglob("*") if p.is_file() and is_image(p.name)) if out.is_dir() else 0
+        # batch_size=1：做完一页就保存，停下来最多丢正在做的那一页；不加 --overwrite，已经有的页跳过
+        device = self.run_mtu(gid, work, dict(load_text=True, ignore_errors=True, batch_concurrent=False, batch_size=1, overwrite=False),
+                              "tablet_render.json", ["-o", str(out)], label="正在导入翻译并渲染", done=done)
+        made = [p for p in out.rglob("*") if p.is_file() and is_image(p.name)] if out.is_dir() else []
+        if not made:
+            raise RuntimeError("manga-translator-ui 没有渲染出图片，看看译文 TXT 是不是在 manga_translator_work\\originals 里")
+        res = mtw / "result"
+        res.mkdir(parents=True, exist_ok=True)
+        stems = {p.stem.lower() for p in made}
+        for old in res.iterdir():   # 换了输出格式时，同名旧译图（另一种扩展名）不能留着
+            if old.is_file() and is_image(old.name) and old.stem.lower() in stems:
+                old.unlink()
+        for p in made:
+            os.replace(p, res / p.name)
+        shutil.rmtree(out, ignore_errors=True)
+        self.state.update(gid, partial=None)
         log(f"{gid} 渲染完成：{len(made)} 张（{device or '没看出用的 GPU 还是 CPU'}），用时 {int(time.time() - t)} 秒")
         self.pack(self.state.item(gid))
+
+    @staticmethod
+    def drop_stale_renders(mtw: Path, out: Path) -> None:
+        """接着渲染前，删掉渲染以后译文又改过的页（json 或译文 txt 比译图新），让它们重新渲染。"""
+        texts: dict[str, float] = {}
+        for p in mtw.rglob("*"):
+            if p.is_file() and p.suffix.lower() in (".json", ".txt") and out not in p.parents:
+                stem = p.name.removesuffix("_translations.json").rsplit("_", 1)[0] if p.suffix.lower() == ".txt" else p.name.removesuffix("_translations.json")
+                texts[stem.lower()] = max(texts.get(stem.lower(), 0), p.stat().st_mtime)
+        for img in [p for p in out.rglob("*") if p.is_file() and is_image(p.name)]:
+            if texts.get(img.stem.lower(), 0) > img.stat().st_mtime:
+                img.unlink()
 
     def pack(self, it: dict) -> None:
         gid = str(it["gid"])
@@ -697,6 +800,18 @@ class Handler(BaseHTTPRequestHandler):
                     b.jobs.put((parts[0], g))
             b.changed()
             return self.send_json({"ok": True})
+        if parts == ["stop"] and method == "POST":
+            for g in [str(g) for g in self.body_json().get("gids", [])]:
+                it = b.state.item(g)
+                if not it:
+                    continue
+                if b.running == g:   # 正在跑：结束 manga-translator-ui，任务自己把状态改成已停止
+                    b.stop_requested.add(g)
+                elif it.get("state") in ("ocr_queued", "render_queued"):
+                    what = "识别原文" if it["state"] == "ocr_queued" else "渲染"
+                    b.state.update(g, state="stopped", message=f"已取消{what}（还没开始）")
+            b.changed()
+            return self.send_json({"ok": True})
         if parts == ["unpair"] and method == "POST":
             b.state.data["tokens"] = {}
             b.state.save()
@@ -773,12 +888,16 @@ def main() -> None:
     for gid, it in bridge.state.items.items():
         if it.get("state") in ("extract_queued", "extracting"):
             bridge.jobs.put(("extract", gid))
-        elif it.get("state") in ("ocr_queued", "ocr"):
+        elif it.get("state") == "ocr_queued":
             bridge.jobs.put(("ocr", gid))
         elif it.get("state") in ("pack_queued", "packing"):
             bridge.jobs.put(("pack", gid))
-        elif it.get("state") in ("render_queued", "rendering"):
+        elif it.get("state") == "render_queued":
             bridge.jobs.put(("render", gid))
+        elif it.get("state") in ("ocr", "rendering"):
+            # 程序关掉（或进程被结束）时正在识别、渲染的：不自动重跑这种很久的活，等用户点了再接着做
+            what, button = Bridge.RESUME_BUTTON["ocr" if it["state"] == "ocr" else "render"]
+            bridge.state.update(gid, state="stopped", message=f"上次{what}被打断了，再点「{button}」从没做完的页接着做")
         elif it.get("state") == "receiving":
             bridge.state.update(gid, state="error", message="上次没传完，请在平板上重新发送")
     ips = local_ips()
