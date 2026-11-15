@@ -64,6 +64,9 @@ public sealed class TabletItem : INotifyPropertyChanged
 	}
 	/// <summary>排队或正在识别原文、渲染：状态旁显示「停止」按钮。</summary>
 	public Visibility StopVisibility => State is "ocr_queued" or "ocr" or "render_queued" or "rendering" ? Visibility.Visible : Visibility.Collapsed;
+	/// <summary>「原画廊」编号下面一行的页数（解压后才知道；打包后是 cbz 里的页数）。</summary>
+	public string PagesText => Pages > 0 ? $"{Pages} 页" : "";
+	public Visibility PagesVisibility => Pages > 0 ? Visibility.Visible : Visibility.Collapsed;
 	public string Progress => Pages > 0 ? $"{Translated}/{Pages}" : (Translated > 0 ? Translated.ToString() : "");
 	public string StateText
 	{
@@ -372,6 +375,39 @@ public partial class MainWindow
 				+ (_tabletPaired > 0 ? $"已配对 {_tabletPaired} 台平板" : "平板上第一次连接时输入这个配对码")
 				+ " · 收到的漫画放进 " + _gs.Root;
 		}
+		// 「平板收发」页顶上只留一行状态，开关和说明在「设置」页
+		if (_tabletError != null)
+		{
+			TabletBar.Text = "收发服务没有在运行：" + _tabletError;
+		}
+		else if (!_gs.TabletEnabled)
+		{
+			TabletBar.Text = "收发没有打开，点右边「收发设置」打开后，平板才能把漫画发过来";
+		}
+		else if (string.IsNullOrEmpty(_tabletAddress))
+		{
+			TabletBar.Text = "正在打开收发服务…";
+		}
+		else
+		{
+			TabletBar.Text = $"正在等待平板 · {_tabletAddress} · 配对码 {_tabletCode}"
+				+ (_tabletOnline.Length > 0 ? " · 在线：" + string.Join("、", _tabletOnline) : "");
+		}
+		TabletBarIcon.Symbol = _tabletError != null ? Wpf.Ui.Controls.SymbolRegular.Warning24 : Wpf.Ui.Controls.SymbolRegular.Tablet24;
+	}
+
+	/// <summary>顶上的「收发设置」：跳到「设置」页的「平板收发」一节。</summary>
+	private void TabletGoSettings_Click(object sender, RoutedEventArgs e)
+	{
+		SelectPage(4);
+		// 等设置页排好版，再把「平板收发」一节滚到最上面
+		Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(delegate
+		{
+			if (PageSettings.Content is Visual content && TabletSection.IsDescendantOf(content))
+			{
+				PageSettings.ScrollToVerticalOffset(TabletSection.TransformToAncestor(content).Transform(new Point(0, 0)).Y);
+			}
+		}));
 	}
 
 	private string[] _tabletOnline = new string[0];
