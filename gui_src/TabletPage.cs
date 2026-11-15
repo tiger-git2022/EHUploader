@@ -64,6 +64,9 @@ public sealed class TabletItem : INotifyPropertyChanged
 	}
 	/// <summary>排队或正在识别原文、渲染：状态旁显示「停止」按钮。</summary>
 	public Visibility StopVisibility => State is "ocr_queued" or "ocr" or "render_queued" or "rendering" ? Visibility.Visible : Visibility.Collapsed;
+	/// <summary>「原画廊」编号下面一行的页数（解压后才知道；打包后是 cbz 里的页数）。</summary>
+	public string PagesText => Pages > 0 ? $"{Pages} 页" : "";
+	public Visibility PagesVisibility => Pages > 0 ? Visibility.Visible : Visibility.Collapsed;
 	public string Progress => Pages > 0 ? $"{Translated}/{Pages}" : (Translated > 0 ? Translated.ToString() : "");
 	public string StateText
 	{

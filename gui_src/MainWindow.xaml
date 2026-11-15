@@ -710,9 +710,13 @@
                                     <DataGridTemplateColumn Header="原画廊" Width="120" SortMemberPath="Gid">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
-                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding Gid}" VerticalAlignment="Center"/>
-                                                    <ui:Button Icon="{ui:SymbolIcon Copy24}" Appearance="Transparent" Padding="4" Margin="4,0,0,0" VerticalAlignment="Center" Click="TabletCopyGid_Click" ToolTip="复制编号"/>
+                                                <!-- 页数放在编号下面一行，不另加列 -->
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding Gid}" VerticalAlignment="Center"/>
+                                                        <ui:Button Icon="{ui:SymbolIcon Copy24}" Appearance="Transparent" Padding="4" Margin="4,0,0,0" VerticalAlignment="Center" Click="TabletCopyGid_Click" ToolTip="复制编号"/>
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding PagesText}" Visibility="{Binding PagesVisibility}" Style="{StaticResource Muted}" Margin="0,2,0,0"/>
                                                 </StackPanel>
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
