@@ -78,6 +78,21 @@ public sealed class TabletItem : INotifyPropertyChanged
 		}
 	}
 
+	/// <summary>刷新时把新读到的状态写进列表里原来那一项（不换对象），界面上的绑定一起更新。</summary>
+	public void CopyFrom(TabletItem src)
+	{
+		Title = src.Title;
+		Folder = src.Folder;
+		Dir = src.Dir;
+		Location = src.Location;
+		State = src.State;
+		Message = src.Message;
+		Pages = src.Pages;
+		Translated = src.Translated;
+		// 空名字表示所有属性都可能变了；Cover 不动，封面另外读
+		PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
+	}
+
 	public static TabletItem FromJson(Dictionary<string, object> d) => new TabletItem
 	{
 		Gid = Json.Long(d, "gid"),
@@ -241,20 +256,60 @@ public partial class MainWindow
 		UpdateTabletStatus();
 	}
 
+	/// <summary>
+	/// 按编号就地更新列表：已有的作品只改它的内容，新的插进去，没了的移走。
+	/// 以前每次刷新（每 5 秒，渲染时更勤）都清空再重建列表、再把选中的选回去，
+	/// 列表会被拽回顶上再滚到选中的那一行，渲染中的作品选着时就一直跳回它那里。
+	/// </summary>
 	private void SetTabletItems(IEnumerable<Dictionary<string, object>> rows)
 	{
-		HashSet<long> selected = new HashSet<long>(TabletGrid.SelectedItems.OfType<TabletItem>().Select(i => i.Gid));
-		_tablet.Clear();
+		List<TabletItem> fresh = new List<TabletItem>();
 		foreach (Dictionary<string, object> d in rows)
 		{
 			TabletItem item = TabletItem.FromJson(d);
 			item.Location = Path.Combine(_gs.Root ?? "", item.Folder ?? "", item.Gid.ToString());
-			LoadTabletCover(item);
-			_tablet.Add(item);
+			fresh.Add(item);
 		}
-		foreach (TabletItem it in _tablet.Where(i => selected.Contains(i.Gid)))
+		HashSet<long> keep = new HashSet<long>(fresh.Select(i => i.Gid));
+		for (int i = _tablet.Count - 1; i >= 0; i--)
 		{
-			TabletGrid.SelectedItems.Add(it);
+			if (!keep.Contains(_tablet[i].Gid))
+			{
+				_tablet.RemoveAt(i);
+			}
+		}
+		Dictionary<long, TabletItem> existing = new Dictionary<long, TabletItem>();
+		foreach (TabletItem it in _tablet)
+		{
+			if (!existing.ContainsKey(it.Gid))
+			{
+				existing[it.Gid] = it;
+			}
+		}
+		for (int i = 0; i < fresh.Count; i++)
+		{
+			TabletItem item;
+			if (existing.TryGetValue(fresh[i].Gid, out item))
+			{
+				existing.Remove(item.Gid);
+				item.CopyFrom(fresh[i]);
+				int at = _tablet.IndexOf(item);
+				if (at != i && i < _tablet.Count)
+				{
+					_tablet.Move(at, i);
+				}
+			}
+			else
+			{
+				item = fresh[i];
+				_tablet.Insert(Math.Min(i, _tablet.Count), item);
+			}
+			LoadTabletCover(item);
+		}
+		// 编号重复等意外情况留下的多余项
+		while (_tablet.Count > fresh.Count)
+		{
+			_tablet.RemoveAt(_tablet.Count - 1);
 		}
 		int waiting = _tablet.Count(i => i.State == "waiting");
 		TabletBadge.Visibility = waiting > 0 ? Visibility.Visible : Visibility.Collapsed;
