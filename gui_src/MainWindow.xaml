@@ -685,8 +685,12 @@
                                 <ui:Button Content="移出列表" Icon="{ui:SymbolIcon Dismiss24}" Click="TabletRemove_Click"
                                            ToolTip="只是不再显示，文件都留着"/>
                             </WrapPanel>
+                            <!-- 每行高度固定（MinRowHeight 比封面和最多三行状态加「停止」按钮都高），渲染时状态文字变长变短、
+                                 「停止」按钮出现消失都不会改变行高；按像素滚动，不会在最后一行变高时按整行跳。
+                                 以前最后一本在渲染时，行高随进度文字反复变化，按行滚动的列表在底部来回跳。 -->
                             <DataGrid x:Name="TabletGrid" RowStyle="{StaticResource StableRow}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" CanUserAddRows="False"
-                                      SelectionMode="Extended" MouseDoubleClick="TabletGrid_DoubleClick">
+                                      SelectionMode="Extended" MouseDoubleClick="TabletGrid_DoubleClick" MinRowHeight="116"
+                                      VirtualizingPanel.ScrollUnit="Pixel">
                                 <DataGrid.ContextMenu>
                                     <ContextMenu>
                                         <MenuItem Header="复制编号" Click="TabletCopyGid_Click"/>
@@ -700,10 +704,10 @@
                                     </ContextMenu>
                                 </DataGrid.ContextMenu>
                                 <DataGrid.Columns>
-                                    <DataGridTemplateColumn Header="封面" Width="76" CanUserSort="False">
+                                    <DataGridTemplateColumn Header="封面" Width="88" CanUserSort="False">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
-                                                <Image Source="{Binding Cover}" Width="60" Height="84" Stretch="Uniform" Margin="2" RenderOptions.BitmapScalingMode="HighQuality"/>
+                                                <Image Source="{Binding Cover}" Width="72" Height="104" Stretch="Uniform" Margin="2" RenderOptions.BitmapScalingMode="HighQuality"/>
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
@@ -735,7 +739,9 @@
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
                                                 <StackPanel Margin="0,4" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding StateText}" TextWrapping="Wrap"/>
+                                                    <!-- 最多三行，多的省略（悬停看全文），行高才不会跟着进度文字变 -->
+                                                    <TextBlock Text="{Binding StateText}" ToolTip="{Binding StateText}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                                               LineStackingStrategy="BlockLineHeight" LineHeight="19" MaxHeight="57"/>
                                                     <ui:Button Content="停止" Icon="{ui:SymbolIcon Stop24}" Padding="8,2" Margin="0,4,0,0" HorizontalAlignment="Left"
                                                                Visibility="{Binding StopVisibility}" Click="TabletRowStop_Click"
                                                                ToolTip="停下这一本的识别原文或渲染；做好的页留着，下次再点从没做完的页接着做"/>
