@@ -351,7 +351,7 @@ public partial class MainWindow
 							bmp.BeginInit();
 							bmp.CacheOption = BitmapCacheOption.OnLoad;
 							bmp.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
-							bmp.DecodePixelWidth = 120;
+							bmp.DecodePixelWidth = 144;
 							bmp.UriSource = new Uri(file);
 							bmp.EndInit();
 							bmp.Freeze();
